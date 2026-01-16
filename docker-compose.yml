@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  parser-lenta:
+    build: .
+    container_name: news_graph_parser_lenta
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=INFO
+      - TZ=Europe/Moscow
+    env_file:
+      - .env
+    command: python -m scripts.run_parser --source lenta --limit 10
+    restart: "no"  # Запуск вручную
+
+  parser-tinvest:
+    build: .
+    container_name: news_graph_parser_tinvest
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=INFO
+      - TZ=Europe/Moscow
+    env_file:
+      - .env
+    command: python -m scripts.run_parser --source tinvest --limit 5 --tickers SBER
+    restart: "no"  # Запуск вручную
+
+  nlp-worker:
+    build: .
+    container_name: news_graph_nlp_worker
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - LOG_LEVEL=INFO
+      - TZ=Europe/Moscow
+    env_file:
+      - .env
+    command: python -m scripts.nlp_worker --once --batch-size 5
+    restart: "no"  # Запуск вручную

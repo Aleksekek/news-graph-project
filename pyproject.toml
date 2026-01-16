@@ -1,0 +1,59 @@
+[project]
+name = "news-graph-project"
+version = "0.1.0"
+description = "GDC - Graph Data Collector для анализа скрытых связей в новостном потоке"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "feedparser>=6.0.10",
+    "aiohttp>=3.9.0",           # Для async парсеров
+    "tenacity>=8.2.0",          # Для retry логики
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    "click>=8.1.0",             # Для CLI
+    "apscheduler>=3.10.0",
+    "tpulse>=0.1.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.11.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+]
+docker = [
+    "docker>=7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+select = [
+    "E", "F", "W",  # pycodestyle
+    "I",            # isort
+    "B",            # flake8-bugbear
+]
+ignore = ["E501"]  # line too long, handled by black
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
