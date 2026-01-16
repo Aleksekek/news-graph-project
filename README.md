@@ -42,37 +42,37 @@ news_graph_project/
 │   │   ├── processing/            # Логика обработки скачанных постов
 │   │   │   └── nlp_worker.py      # Базовая nlp обработка
 │   │   │
-│   │   ├── storage/              # Работа с хранилищами
-│   │   │   ├── database.py       # DatabaseWriter → ArticleRepository
-│   │   │   └── models.py         # SQLAlchemy модели
-│   │   │
-│   │   └── scheduling/           # Планирование задач
-│   │       ├── scheduler.py      # TaskScheduler
-│   │       └── runner.py         # scheduler_runner.py
+│   │   ├── storage/               # Работа с хранилищами
+│   │   │   ├── database.py        # DatabaseWriter → ArticleRepository
+│   │   │   └── models.py          # SQLAlchemy модели
+│   │   │ 
+│   │   └── scheduling/            # Планирование задач
+│   │       ├── scheduler.py       # TaskScheduler
+│   │       └── runner.py          # scheduler_runner.py
 │   │
-│   ├── application/              # Оркестрация (use cases)
-│   │   ├── use_cases/            # Сценарии использования
-│   │   │   ├── parse_source.py   # Сценарий парсинга источника
+│   ├── application/               # Оркестрация (use cases)
+│   │   ├── use_cases/             # Сценарии использования
+│   │   │   ├── parse_source.py    # Сценарий парсинга источника
 │   │   │   └── process_articles.py # Сценарий обработки статей
 │   │   │
-│   │   └── cli/                 # CLI команды
-│   │       ├── commands.py      # Все команды
-│   │       └── utils.py         # Вспомогательные функции для CLI
+│   │   └── cli/                   # CLI команды
+│   │       ├── commands.py        # Все команды
+│   │       └── utils.py           # Вспомогательные функции для CLI
 │   │
-│   ├── infrastructure/           # Внешние взаимодействия
-│   │   ├── http/                # HTTP клиенты
-│   │   │   ├── client.py        # Базовый HTTP клиент
-│   │   │   └── session.py       # Сессии с retry логикой
+│   ├── infrastructure/            # Внешние взаимодействия
+│   │   ├── http/                  # HTTP клиенты
+│   │   │   ├── client.py          # Базовый HTTP клиент
+│   │   │   └── session.py         # Сессии с retry логикой
 │   │   │
-│   │   └── telegram/            # Телеграм бот
-│   │       └── bot.py           # Основной бот
+│   │   └── telegram/              # Телеграм бот
+│   │       └── bot.py             # Основной бот
 │   │
-│   └── utils/                    # Вспомогательные утилиты
-│       ├── logging.py           # logging_config.py
-│       ├── data.py              # Jбщие data utils
-│       └── retry.py             # Логика повторных попыток
+│   └── utils/                     # Вспомогательные утилиты
+│       ├── logging.py             # logging_config.py
+│       ├── data.py                # Jбщие data utils
+│       └── retry.py               # Логика повторных попыток
 │
-└── scripts/                      # Скрипты запуска
-    ├── run_parser.py            # Универсальный скрипт запуска
-    └── nlp_worker.py            # simple_nlp_worker.py
+└── scripts/                       # Скрипты запуска
+    ├── run_parser.py              # Универсальный скрипт запуска
+    └── nlp_worker.py              # simple_nlp_worker.py
 ```
