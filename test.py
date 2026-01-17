@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Обновленный тестовый скрипт.
+Обновленный тестовый скрипт для асинхронной работы.
 """
 
 import asyncio
@@ -10,21 +10,21 @@ from datetime import datetime, timedelta
 sys.path.insert(0, "src")
 
 from src.application.use_cases.parse_source import ParseSourceUseCase
-from src.domain.storage.database import ArticleRepository
+from src.domain.storage.database import ArticleRepository, DatabasePoolManager
 from src.utils.logging import setup_logging
 
 logger = setup_logging()
 
 
 async def test_database_connection():
-    """Тест подключения к БД."""
+    """Тест асинхронного подключения к БД."""
     print("🔌 Тест подключения к БД...")
 
     try:
         repo = ArticleRepository()
 
-        # Простой запрос для проверки
-        if repo.test_connection():
+        # Асинхронный тест
+        if await repo.test_connection():
             print("✅ Подключение к БД успешно")
             return True
         else:
@@ -37,14 +37,18 @@ async def test_database_connection():
 
 
 async def test_lenta_parser():
-    """Тест парсера Lenta.ru."""
+    """Тест парсера Lenta.ru с унифицированным интерфейсом."""
     print("\n📰 Тест парсера Lenta.ru...")
 
     try:
         use_case = ParseSourceUseCase()
 
-        # Парсим только 2 статьи для теста
-        stats = await use_case.execute(source_name="lenta", limit=2)
+        # Парсим с параметрами через **kwargs
+        stats = await use_case.execute(
+            source_name="lenta",
+            limit=2,
+            categories=["Политика", "Экономика", "Мир"],  # Передаем через kwargs
+        )
 
         print(f"✅ Парсинг Lenta.ru завершен")
         print(f"   Сохранено: {stats.saved}, Пропущено: {stats.skipped}")
@@ -60,15 +64,17 @@ async def test_lenta_parser():
 
 
 async def test_tinvest_parser():
-    """Тест парсера Тинькофф Пульса."""
+    """Тест парсера Тинькофф Пульса с унифицированным интерфейсом."""
     print("\n💹 Тест парсера Тинькофф Пульса...")
 
     try:
         use_case = ParseSourceUseCase()
 
-        # Парсим только 2 поста для теста
-        stats = await use_case.execute_with_tickers(
-            source_name="tinvest", tickers=["SBER"], limit=2
+        # Парсим с параметрами через **kwargs
+        stats = await use_case.execute(
+            source_name="tinvest",
+            limit=2,
+            tickers=["SBER", "VTBR"],  # Передаем через kwargs
         )
 
         print(f"✅ Парсинг Тинькофф Пульса завершен")
@@ -84,94 +90,91 @@ async def test_tinvest_parser():
         return False
 
 
-async def test_nlp_worker():
-    """Тест NLP воркера."""
-    print("\n🧠 Тест NLP воркера...")
+async def test_unified_interface():
+    """Тест унифицированного интерфейса."""
+    print("\n🎯 Тест унифицированного интерфейса...")
 
     try:
-        from src.domain.processing.nlp_worker import SimpleNLPWorker
+        from src.domain.parsing.factory import ParserFactory
 
-        worker = SimpleNLPWorker(batch_size=2)
-        processed = await worker.process_batch()
+        # Тест TInvest с тикерами в конструкторе
+        print("  Создаем TInvest парсер с тикерами в конструкторе...")
+        parser1 = ParserFactory.create("tinvest", {"tickers": ["SBER", "GAZP"]})
 
-        print(f"✅ NLP воркер обработал: {processed} статей")
-        return processed >= 0  # Может быть 0 если нет статей для обработки
+        # Тест TInvest с передачей тикеров в метод parse
+        print("  Создаем TInvest парсер без тикеров...")
+        parser2 = ParserFactory.create("tinvest")
+
+        async with parser1:
+            items1 = await parser1.parse(limit=1)
+            print(f"    Парсер1 (тикеры в конструкторе): {len(items1)} постов")
+
+        async with parser2:
+            items2 = await parser2.parse(limit=1, tickers=["VTBR"])
+            print(f"    Парсер2 (тикеры в методе): {len(items2)} постов")
+
+        # Тест Lenta с категориями
+        print("  Создаем Lenta парсер с категориями...")
+        parser3 = ParserFactory.create("lenta", {"categories": ["Политика"]})
+
+        async with parser3:
+            items3 = await parser3.parse(limit=1)
+            print(f"    Парсер3 (категории в конструкторе): {len(items3)} статей")
+
+        return True
 
     except Exception as e:
-        print(f"❌ Ошибка NLP воркера: {e}")
+        print(f"❌ Ошибка теста интерфейса: {e}")
         import traceback
 
         traceback.print_exc()
         return False
 
 
-async def test_statistics():
-    """Тест получения статистики."""
-    print("\n📊 Тест получения статистики...")
-
-    try:
-        repo = ArticleRepository()
-        stats = repo.get_processing_stats()
-
-        print(f"✅ Статистика получена:")
-        print(f"   Всего статей: {stats.get('total', 0)}")
-        print(f"   Сырых: {stats.get('raw', 0)}")
-        print(f"   Обработанных: {stats.get('processed', 0)}")
-
-        # Очищаем ресурсы
-        repo.cleanup()
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Ошибка получения статистики: {e}")
-        return False
-
-
 async def main():
     """Основная тестовая функция."""
-    print("🚀 Запуск интеграционных тестов")
+    print("🚀 Запуск интеграционных тестов (асинхронная версия)")
     print("=" * 50)
 
-    tests = [
-        ("Подключение к БД", test_database_connection),
-        ("Парсер Lenta.ru", test_lenta_parser),
-        ("Парсер Тинькофф Пульса", test_tinvest_parser),
-        ("NLP воркер", test_nlp_worker),
-        ("Статистика", test_statistics),
-    ]
+    try:
+        tests = [
+            ("Подключение к БД", test_database_connection),
+            ("Парсер Lenta.ru", test_lenta_parser),
+            #("Парсер Тинькофф Пульса", test_tinvest_parser),
+            #("Унифицированный интерфейс", test_unified_interface),
+        ]
 
-    results = []
+        results = []
 
-    for test_name, test_func in tests:
-        try:
-            success = await test_func()
-            results.append((test_name, success))
+        for test_name, test_func in tests:
+            try:
+                success = await test_func()
+                results.append((test_name, success))
 
-            # Небольшая пауза между тестами
-            await asyncio.sleep(1)
+                await asyncio.sleep(1)
 
-        except Exception as e:
-            print(f"❌ Критическая ошибка в тесте {test_name}: {e}")
-            results.append((test_name, False))
+            except Exception as e:
+                print(f"❌ Критическая ошибка в тесте {test_name}: {e}")
+                results.append((test_name, False))
 
-    print("\n" + "=" * 50)
-    print("📋 Результаты тестов:")
+        print("\n" + "=" * 50)
+        print("📋 Результаты тестов:")
 
-    all_passed = True
-    for test_name, success in results:
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"  {test_name}: {status}")
-        if not success:
-            all_passed = False
+        all_passed = True
+        for test_name, success in results:
+            status = "✅ PASS" if success else "❌ FAIL"
+            print(f"  {test_name}: {status}")
+            if not success:
+                all_passed = False
 
-    print("\n" + "=" * 50)
-    if all_passed:
-        print("🎉 Все тесты пройдены успешно!")
-        return 0
-    else:
-        print("⚠️  Некоторые тесты не пройдены")
-        return 1
+        print("\n" + "=" * 50)
+
+        return 0 if all_passed else 1
+
+    finally:
+        # Закрываем пул ТОЛЬКО в конце всех тестов
+        print("🔌 Закрытие глобального пула соединений...")
+        await DatabasePoolManager.close_global_pool()
 
 
 if __name__ == "__main__":

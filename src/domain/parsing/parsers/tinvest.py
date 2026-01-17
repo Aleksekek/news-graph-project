@@ -1,5 +1,5 @@
 """
-Парсер Тинькофф Пульса
+Парсер Тинькофф Пульса с унифицированным интерфейсом.
 """
 
 import asyncio
@@ -13,12 +13,13 @@ from tpulse import TinkoffPulse
 from src.core.exceptions import ParserError
 from src.domain.parsing.base import BaseParser, ParsedItem, ParserConfig
 from src.utils.data import safe_datetime, safe_int, safe_list, safe_str
+from src.utils.logging import log_async_execution_time
 from src.utils.retry import retry_network
 
 
 class TInvestParser(BaseParser):
     """
-    Парсер Тинькофф Пульса.
+    Парсер Тинькофф Пульса с унифицированным интерфейсом.
     Обертка над существующей библиотекой tpulse с async интерфейсом.
     """
 
@@ -29,30 +30,33 @@ class TInvestParser(BaseParser):
         self.tp = TinkoffPulse()
 
         # Настройки
-        self.request_delay = self.config.request_delay
         self.sleep_interval = 2000
         self.sleep_duration = 30
         self.checkpoint_interval = 500
 
-    async def parse_recent(
+        # Тикеры из конфигурации
+        self.default_tickers = getattr(config, "tickers", ["SBER", "VTBR", "MOEX"])
+
+    @log_async_execution_time()
+    async def parse(
         self,
         limit: int = 100,
         tickers: Optional[List[str]] = None,
-        **kwargs,  # Принимаем дополнительные параметры
+        **kwargs,  # Игнорируем лишние параметры
     ) -> List[ParsedItem]:
         """
-        Парсинг последних постов Тинькофф Пульса.
+        Унифицированный метод парсинга Тинькофф Пульса.
 
         Args:
             limit: Максимальное количество постов в сумме
-            tickers: Список тикеров для парсинга (переопределяет дефолтные)
+            tickers: Список тикеров для парсинга (если None, берем из конфига)
             **kwargs: Дополнительные параметры (игнорируются)
 
         Returns:
             Список ParsedItem
         """
-        # Используем переданные тикеры или дефолтные
-        target_tickers = tickers if tickers else ["SBER", "VTBR", "MOEX"]
+        # Используем переданные тикеры или из конфига
+        target_tickers = tickers if tickers else self.default_tickers
 
         self.logger.info(f"Парсинг Тинькофф Пульса: {target_tickers} (лимит: {limit})")
 
@@ -79,15 +83,116 @@ class TInvestParser(BaseParser):
         self.logger.info(f"Всего распарсено: {len(all_items)} постов")
         return all_items
 
+    @log_async_execution_time()
+    async def parse_period(
+        self, start_date: datetime, end_date: datetime, limit: int = 100, **kwargs
+    ) -> List[ParsedItem]:
+        """
+        Архивный парсинг Тинькофф Пульса.
+        TInvest API не поддерживает прямую фильтрацию по дате,
+        поэтому парсим пока не достигнем нужной даты.
+        """
+        self.logger.info(
+            f"Архивный парсинг TInvest: {start_date.date()} - {end_date.date()}"
+        )
+
+        tickers = kwargs.get("tickers", self.default_tickers)
+        all_items = []
+
+        for ticker in tickers:
+            try:
+                ticker_items = await self._parse_ticker_archive(
+                    ticker, start_date, end_date, limit
+                )
+                all_items.extend(ticker_items)
+                self.logger.info(f"Тикер {ticker}: {len(ticker_items)} постов")
+
+                # Задержка между тикерами
+                if ticker != tickers[-1]:
+                    await asyncio.sleep(5)
+
+            except Exception as e:
+                self.logger.error(f"Ошибка архивного парсинга тикера {ticker}: {e}")
+                continue
+
+        return all_items
+
+    async def _parse_ticker_archive(
+        self, ticker: str, start_date: datetime, end_date: datetime, max_posts: int
+    ) -> List[ParsedItem]:
+        """Парсинг постов за период для конкретного тикера"""
+        self.logger.debug(f"Архивный парсинг тикера: {ticker}")
+
+        loop = asyncio.get_event_loop()
+        all_items = []
+        cursor = None
+        has_more = True
+
+        while has_more and len(all_items) < max_posts:
+            try:
+                # Вызываем синхронный код в отдельном потоке
+                data = await loop.run_in_executor(
+                    None, self._make_request_with_retry_sync, ticker, cursor
+                )
+
+                if not data or not data.get("items"):
+                    break
+
+                # Обрабатываем посты
+                for post in data["items"]:
+                    if len(all_items) >= max_posts:
+                        break
+
+                    # Проверяем дату поста
+                    post_date = self._extract_post_date(post)
+                    if post_date and post_date < start_date:
+                        has_more = False
+                        break
+
+                    if post_date and post_date <= end_date:
+                        try:
+                            post_data = self._extract_post_data(post, ticker)
+                            df_row = pd.Series(post_data)
+                            parsed_item = self._row_to_parsed_item(df_row, ticker)
+
+                            if parsed_item and self.validate_item(parsed_item):
+                                all_items.append(parsed_item)
+                        except Exception as e:
+                            self.logger.error(f"Ошибка обработки поста: {e}")
+                            continue
+
+                # Пагинация
+                if data.get("hasNext", False) and data.get("nextCursor"):
+                    cursor = data["nextCursor"]
+                    await asyncio.sleep(self.config.request_delay)
+                else:
+                    break
+
+            except Exception as e:
+                self.logger.error(f"Ошибка архивного парсинга: {e}")
+                break
+
+        return all_items
+
+    def _extract_post_date(self, post: Dict[str, Any]) -> Optional[datetime]:
+        """Извлечение даты поста"""
+        try:
+            inserted = post.get("inserted", "")
+            if inserted:
+                utc_time = datetime.fromisoformat(inserted.replace("Z", "+00:00"))
+                return utc_time
+        except Exception:
+            pass
+        return None
+
     async def _parse_ticker_posts(self, ticker: str, limit: int) -> List[ParsedItem]:
         """Парсинг постов по конкретному тикеру"""
         self.logger.debug(f"Парсинг тикера: {ticker}")
 
-        # Используем синхронный вызов в thread pool, чтобы не блокировать event loop
+        # Используем синхронный вызов в thread pool
         loop = asyncio.get_event_loop()
 
         try:
-            # Вызываем синхронный код в отдельном потоке
             df = await loop.run_in_executor(
                 None, self._get_posts_dataframe_sync, ticker, limit
             )
@@ -113,10 +218,7 @@ class TInvestParser(BaseParser):
             raise ParserError(f"Ошибка парсинга тикера {ticker}: {e}")
 
     def _get_posts_dataframe_sync(self, ticker: str, num_posts: int) -> pd.DataFrame:
-        """
-        Синхронный метод получения постов.
-        Оригинальная логика из PulseParser.
-        """
+        """Синхронный метод получения постов"""
         all_posts = []
         cursor = None
         posts_loaded = 0
@@ -156,7 +258,7 @@ class TInvestParser(BaseParser):
             # Пагинация
             if data.get("hasNext", False) and data.get("nextCursor"):
                 cursor = data["nextCursor"]
-                time.sleep(self.request_delay)
+                time.sleep(self.config.request_delay)
             else:
                 break
 
@@ -179,13 +281,13 @@ class TInvestParser(BaseParser):
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    delay = self.request_delay * (2**attempt)
+                    delay = self.config.request_delay * (2**attempt)
                     self.logger.warning(
                         f"Повторная попытка {attempt + 1}/{max_retries} через {delay} сек"
                     )
                     time.sleep(delay)
                 else:
-                    time.sleep(self.request_delay)
+                    time.sleep(self.config.request_delay)
 
                 return self.tp.get_posts_by_ticker(ticker, cursor=cursor)
 
@@ -354,7 +456,6 @@ class TInvestParser(BaseParser):
         import hashlib
         import json
 
-        # Создаем строку для хэширования
         content_for_hash = json.dumps(
             {
                 "username": safe_str(row.get("username", "")),
@@ -367,7 +468,6 @@ class TInvestParser(BaseParser):
             ensure_ascii=False,
         )
 
-        # Хэшируем
         post_hash = hashlib.sha256(content_for_hash.encode()).hexdigest()[:16]
         return f"tinvest_{post_hash}"
 
@@ -381,7 +481,6 @@ class TInvestParser(BaseParser):
         else:
             date_str = str(date_val).replace("-", "")
 
-        # Очищаем username для URL
         username_clean = "".join(
             c for c in username if c.isalnum() or c in "-_"
         ).lower()
@@ -393,14 +492,12 @@ class TInvestParser(BaseParser):
         if not text:
             return "Без заголовка"
 
-        # Берем первую непустую строку
         lines = text.strip().split("\n")
         for line in lines:
             if line.strip() and len(line.strip()) > 5:
                 title = line.strip()[:150]
                 return title + "..." if len(line.strip()) > 150 else title
 
-        # Если все строки пустые, берем начало текста
         return text[:100] + "..." if len(text) > 100 else text
 
     def validate_item(self, item: ParsedItem) -> bool:

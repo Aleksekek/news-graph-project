@@ -49,7 +49,7 @@ class TInvestProcessor(BaseProcessor):
             published_at=item.published_at,
             author=item.author,
             language="ru",
-            headers=self.generate_tinvest_headers(),
+            headers=self.generate_headers(item),
             meta_info=meta_info_json,
             status="raw",
         )
@@ -153,7 +153,7 @@ class TInvestProcessor(BaseProcessor):
 
         return self.prepare_title_for_db(title, max_length)
 
-    def generate_tinvest_headers(self) -> str:
+    def generate_headers(self, item: ParsedItem) -> str:
         """
         Генерация заголовков HTTP для Тинькофф Пульса.
 
@@ -166,7 +166,8 @@ class TInvestProcessor(BaseProcessor):
             "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
         }
 
-        return json.dumps(headers, ensure_ascii=False)
+        return None
+        #return json.dumps(headers, ensure_ascii=False)
 
     def generate_canonical_url(self, item: ParsedItem) -> Optional[str]:
         """

@@ -159,7 +159,8 @@ class LentaProcessor(BaseProcessor):
             "Referer": "https://lenta.ru/",
         }
 
-        return json.dumps(headers, ensure_ascii=False)
+        return None
+        #return json.dumps(headers, ensure_ascii=False)
 
     def generate_canonical_url(self, item: ParsedItem) -> Optional[str]:
         """

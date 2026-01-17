@@ -117,18 +117,40 @@ def safe_datetime(value: Any, default: Optional[datetime] = None) -> Optional[da
         return value
 
     if isinstance(value, str):
+        # Очищаем строку
+        value = value.strip()
+
         # Пробуем разные форматы
         formats = [
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%d",
-            "%d.%m.%Y %H:%M",
-            "%d/%m/%Y %H:%M:%S",
+            # RSS формат с часовым поясом
+            "%a, %d %b %Y %H:%M:%S %z",  # Sat, 17 Jan 2026 19:09:24 +0300
+            "%a, %d %b %Y %H:%M:%S %Z",  # С текстовым часовым поясом
+            # ISO форматы
+            "%Y-%m-%dT%H:%M:%S%z",  # 2026-01-17T19:09:24+0300
+            "%Y-%m-%d %H:%M:%S%z",  # 2026-01-17 19:09:24+0300
+            "%Y-%m-%dT%H:%M:%S",  # 2026-01-17T19:09:24
+            "%Y-%m-%d %H:%M:%S",  # 2026-01-17 19:09:24
+            # Другие форматы
+            "%d.%m.%Y %H:%M:%S",  # 17.01.2026 19:09:24
+            "%d/%m/%Y %H:%M:%S",  # 17/01/2026 19:09:24
+            "%Y-%m-%d",  # 2026-01-17
+            "%d.%m.%Y %H:%M",  # 17.01.2026 19:09
+            "%d/%m/%Y %H:%M",  # 17/01/2026 19:09
+            # Для Lenta.ru мета-тегов
+            "%Y-%m-%dT%H:%M:%S.%f%z",  # 2026-01-17T19:09:24.123+0300
         ]
 
         for fmt in formats:
             try:
-                return datetime.strptime(value, fmt)
+                if fmt.endswith("%z"):
+                    # Для форматов с часовым поясом
+                    dt = datetime.strptime(value, fmt)
+                    # Приводим к наивному datetime (убираем часовой пояс)
+                    if dt.tzinfo:
+                        dt = dt.astimezone().replace(tzinfo=None)
+                    return dt
+                else:
+                    return datetime.strptime(value, fmt)
             except ValueError:
                 continue
 
@@ -405,28 +427,30 @@ def validate_url(url: str) -> bool:
     """
     if not url or not isinstance(url, str):
         return False
-    
+
     # Базовые проверки
     if len(url) < 10:
         return False
-    
+
     # Проверяем что это похоже на URL
     url_lower = url.lower()
-    
+
     # Должен содержать протокол или начинаться с //
-    if not (url_lower.startswith('http://') or 
-            url_lower.startswith('https://') or
-            url_lower.startswith('//')):
+    if not (
+        url_lower.startswith("http://")
+        or url_lower.startswith("https://")
+        or url_lower.startswith("//")
+    ):
         # Для Lenta.ru это нормально - добавляем https://
-        if url.startswith('/'):
+        if url.startswith("/"):
             return True  # Относительные URL ок
-        if 'lenta.ru' in url_lower or 'tinvest://' in url_lower:
+        if "lenta.ru" in url_lower or "tinvest://" in url_lower:
             return True
-    
+
     # Проверяем наличие точки (домен)
-    if '.' not in url and '://' not in url:
+    if "." not in url and "://" not in url:
         return False
-    
+
     return True
 
 

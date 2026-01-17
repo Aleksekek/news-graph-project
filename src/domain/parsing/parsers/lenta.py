@@ -1,6 +1,5 @@
 """
-Парсер Lenta.ru
-Объединяет LentaParser и LentaArchiveParser
+Парсер Lenta.ru с унифицированным интерфейсом.
 """
 
 import asyncio
@@ -23,6 +22,7 @@ from src.utils.retry import retry_network
 class LentaParser(BaseParser):
     """
     Парсер Lenta.ru с поддержкой RSS и HTML парсинга.
+    Унифицированный интерфейс с поддержкой **kwargs.
     """
 
     def __init__(self, config: ParserConfig):
@@ -33,26 +33,41 @@ class LentaParser(BaseParser):
         self.rss_url = f"{self.base_url}/rss"
         self.archive_base_url = f"{self.base_url}/news"
 
+        # Категории из конфигурации
+        self.default_categories = getattr(config, "categories", None)
+
         # Кэширование
         self._last_rss_fetch = None
         self._rss_cache = []
 
     @log_async_execution_time()
-    async def parse_recent(self, limit: int = 100) -> List[ParsedItem]:
+    async def parse(
+        self,
+        limit: int = 100,
+        categories: Optional[List[str]] = None,
+        **kwargs,  # Игнорируем лишние параметры
+    ) -> List[ParsedItem]:
         """
-        Парсинг последних новостей через RSS.
+        Унифицированный метод парсинга Lenta.ru.
 
         Args:
             limit: Максимальное количество новостей
+            categories: Фильтр по категориям (если None, берем из конфига)
+            **kwargs: Дополнительные параметры
 
         Returns:
             Список ParsedItem
         """
-        self.logger.info(f"Парсинг последних {limit} новостей Lenta.ru")
+        # Используем переданные категории или из конфига
+        target_categories = categories if categories else self.default_categories
+
+        self.logger.info(
+            f"Парсинг Lenta.ru: лимит={limit}, категории={target_categories}"
+        )
 
         try:
-            # Получаем RSS
-            rss_items = await self._fetch_rss_feed(limit)
+            # Получаем RSS с фильтрацией по категориям
+            rss_items = await self._fetch_rss_feed(limit, target_categories)
 
             # Парсим каждую статью
             parsed_items = []
@@ -89,14 +104,17 @@ class LentaParser(BaseParser):
             self.logger.error(f"Ошибка парсинга Lenta.ru: {e}")
             raise ParserError(f"Ошибка парсинга Lenta.ru: {e}")
 
+    @log_async_execution_time()
     async def parse_period(
         self,
         start_date: datetime,
         end_date: datetime,
+        limit: int = 100,
         max_articles_per_day: int = 20,
         max_pages_per_day: int = 5,
         skip_existing_urls: Optional[Set[str]] = None,
         categories: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[ParsedItem]:
         """
         Архивный парсинг Lenta.ru за период.
@@ -104,29 +122,33 @@ class LentaParser(BaseParser):
         Args:
             start_date: Начальная дата
             end_date: Конечная дата
+            limit: Общий лимит статей
             max_articles_per_day: Максимум статей в день
             max_pages_per_day: Максимум страниц в день
-            skip_existing_urls: URL для пропуска (дедупликация)
-            categories: Фильтр по категориям
-
-        Returns:
-            Список ParsedItem
+            skip_existing_urls: URL для пропуска
+            categories: Фильтр по категориям (если None, берем из конфига)
+            **kwargs: Дополнительные параметры
         """
+        target_categories = categories if categories else self.default_categories
+
         self.logger.info(
-            f"Архивный парсинг Lenta.ru: {start_date.date()} - {end_date.date()}"
+            f"Архивный парсинг Lenta.ru: {start_date.date()} - {end_date.date()}, "
+            f"категории: {target_categories}"
         )
 
         parsed_items = []
         current_date = start_date
 
-        while current_date <= end_date:
+        while current_date <= end_date and len(parsed_items) < limit:
             try:
                 day_items = await self._parse_archive_day(
                     date=current_date,
-                    max_articles_per_day=max_articles_per_day,
+                    max_articles_per_day=min(
+                        max_articles_per_day, limit - len(parsed_items)
+                    ),
                     max_pages_per_day=max_pages_per_day,
                     skip_existing_urls=skip_existing_urls,
-                    categories=categories,
+                    categories=target_categories,
                 )
 
                 parsed_items.extend(day_items)
@@ -145,27 +167,41 @@ class LentaParser(BaseParser):
         self.logger.info(f"Архивный парсинг завершен: {len(parsed_items)} статей")
         return parsed_items
 
-    async def _fetch_rss_feed(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Получение RSS ленты"""
+    async def _fetch_rss_feed(
+        self, limit: int = 100, categories: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
+        """Получение RSS ленты с фильтрацией по категориям"""
         self.logger.debug(f"Загрузка RSS: {self.rss_url}")
 
         try:
-            # Используем feedparser (синхронный, но быстрый)
-            # В будущем можно заменить на aiohttp + парсинг XML
             feed = feedparser.parse(self.rss_url)
 
             if feed.bozo:
                 raise ParserError(f"Ошибка RSS: {feed.bozo_exception}")
 
             items = []
-            for entry in feed.entries[:limit]:
+            for entry in feed.entries[: limit * 2]:  # Берем больше для фильтрации
                 try:
+                    # Парсим категорию
+                    entry_category = ""
+                    if entry.get("tags"):
+                        entry_category = safe_str(entry.tags[0].term)
+
+                    # Фильтруем по категориям если указаны
+                    if categories and entry_category:
+                        if not any(
+                            cat.lower() in entry_category.lower() for cat in categories
+                        ):
+                            continue
+
                     # Парсим дату публикации
                     published_dt = None
                     if hasattr(entry, "published_parsed") and entry.published_parsed:
                         published_dt = datetime.fromtimestamp(
                             time.mktime(entry.published_parsed)
                         )
+                        # Переводим обратно в UTC+3
+                        published_dt = published_dt.replace(hour=(published_dt.hour + 3) % 24)
 
                     items.append(
                         {
@@ -174,9 +210,7 @@ class LentaParser(BaseParser):
                             "link": safe_str(entry.get("link", "")),
                             "author": safe_str(entry.get("author", "")),
                             "published": published_dt,
-                            "category": safe_str(
-                                entry.tags[0].term if entry.get("tags") else ""
-                            ),
+                            "category": entry_category,
                             "summary": safe_str(entry.get("summary", "")),
                         }
                     )
@@ -184,6 +218,10 @@ class LentaParser(BaseParser):
                 except Exception as e:
                     self.logger.warning(f"Ошибка обработки RSS элемента: {e}")
                     continue
+
+                # Останавливаемся при достижении лимита
+                if len(items) >= limit:
+                    break
 
             return items
 
@@ -492,29 +530,39 @@ class LentaParser(BaseParser):
     def _extract_published_time(
         self, soup: BeautifulSoup, url: str
     ) -> Optional[datetime]:
-        """Извлечение даты публикации"""
-        # Из мета-тегов
+        """Извлечение даты публикации с поддержкой форматов Lenta.ru"""
+
+        # 1. Сначала пробуем мета-теги (там может быть полное время)
         meta_selectors = [
             'meta[property="article:published_time"]',
             'meta[name="pubdate"]',
             'meta[name="publish_date"]',
+            'meta[property="og:article:published_time"]',
         ]
 
         for selector in meta_selectors:
             try:
                 elem = soup.select_one(selector)
                 if elem and elem.get("content"):
-                    dt = safe_datetime(elem["content"])
+                    content = elem["content"]
+                    self.logger.debug(f"Найдена дата в мета-теге {selector}: {content}")
+                    dt = safe_datetime(content)
                     if dt:
+                        self.logger.debug(f"Распарсено из мета-тега: {dt}")
                         return dt
-            except:
+            except Exception as e:
+                self.logger.debug(f"Ошибка парсинга мета-тега {selector}: {e}")
                 continue
 
-        # Из текста страницы
+        # 2. Ищем время в специальных элементах Lenta.ru
+        #    Формат: "19:09, 17 января 2026"
         time_selectors = [
-            "a.topic-header__time",
+            "a.topic-header__time",  # Основной элемент времени Lenta
+            "span.topic-header__time",
+            ".topic-header__time",
             ".article-date",
             ".published",
+            "time[datetime]",
             "time",
         ]
 
@@ -522,21 +570,108 @@ class LentaParser(BaseParser):
             try:
                 elem = soup.select_one(selector)
                 if elem:
+                    # Сначала проверяем атрибут datetime (если есть)
+                    datetime_attr = elem.get("datetime")
+                    if datetime_attr:
+                        self.logger.debug(f"Найдено datetime атрибут: {datetime_attr}")
+                        dt = safe_datetime(datetime_attr)
+                        if dt:
+                            self.logger.debug(f"Распарсено из datetime атрибута: {dt}")
+                            return dt
+
+                    # Пробуем текст элемента
                     text = elem.get_text(strip=True)
-                    dt = safe_datetime(text)
-                    if dt:
-                        return dt
-            except:
+                    if text:
+
+                        # Специальная обработка формата Lenta.ru: "19:09, 17 января 2026"
+                        dt = self._parse_lenta_time_format(text)
+                        if dt:
+                            return dt
+
+                        # Пробуем стандартный парсинг
+                        dt = safe_datetime(text)
+                        if dt:
+                            self.logger.debug(f"Распарсено стандартным парсером: {dt}")
+                            return dt
+
+            except Exception as e:
+                self.logger.debug(f"Ошибка парсинга элемента {selector}: {e}")
                 continue
 
-        # Из URL (формат: /news/2024/01/15/slug/)
+        # 3. Если на странице не нашли время, но у нас есть из RSS - логируем
+        #    (дата будет взята из RSS в _create_parsed_item)
+        self.logger.debug(
+            "Время публикации не найдено на странице, будет использовано из RSS"
+        )
+
+        # 4. Из URL (формат: /news/2024/01/15/slug/)
+        #    Только дата, без времени
         date_match = re.search(r"/(\d{4})/(\d{2})/(\d{2})/", url)
         if date_match:
             year, month, day = map(int, date_match.groups())
             try:
-                return datetime(year, month, day)
-            except:
+                dt = datetime(year, month, day)
+                self.logger.debug(f"Дата из URL: {dt}")
+                return dt
+            except Exception as e:
+                self.logger.debug(f"Ошибка создания даты из URL: {e}")
                 pass
+
+        return None
+
+    def _parse_lenta_time_format(self, text: str) -> Optional[datetime]:
+        """
+        Парсинг специфичного формата времени Lenta.ru.
+        Форматы:
+            "19:09, 17 января 2026"
+            "19:09, 17 января 2026 г."
+            "19:09, 17 янв 2026"
+        """
+        try:
+            # Убираем "г." если есть
+            text = text.replace(" г.", "")
+
+            # Паттерн для формата "19:09, 17 января 2026"
+            pattern = r"(\d{1,2}):(\d{2})\s*,\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})"
+            match = re.search(pattern, text, re.IGNORECASE)
+
+            if match:
+                hour, minute, day, month_str, year = match.groups()
+
+                # Преобразуем русское название месяца
+                month_map = {
+                    "января": 1,
+                    "янв": 1,
+                    "февраля": 2,
+                    "фев": 2,
+                    "марта": 3,
+                    "мар": 3,
+                    "апреля": 4,
+                    "апр": 4,
+                    "мая": 5,
+                    "май": 5,
+                    "июня": 6,
+                    "июн": 6,
+                    "июля": 7,
+                    "июл": 7,
+                    "августа": 8,
+                    "авг": 8,
+                    "сентября": 9,
+                    "сен": 9,
+                    "октября": 10,
+                    "окт": 10,
+                    "ноября": 11,
+                    "ноя": 11,
+                    "декабря": 12,
+                    "дек": 12,
+                }
+
+                month = month_map.get(month_str.lower())
+                if month:
+                    return datetime(int(year), month, int(day), int(hour), int(minute))
+
+        except Exception as e:
+            self.logger.debug(f"Ошибка парсинга формата Lenta: {text} - {e}")
 
         return None
 
@@ -605,7 +740,7 @@ class LentaParser(BaseParser):
             url=article_data["url"],
             title=article_data["title"] or rss_item["title"],
             content=article_data["content"],
-            published_at=article_data["published_time"] or rss_item["published"],
+            published_at=rss_item["published"] or article_data["published_time"],
             author=article_data["author"] or rss_item["author"],
             metadata={
                 "category": article_data["category"] or rss_item["category"],

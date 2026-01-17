@@ -1,5 +1,6 @@
 """
 Базовые классы для парсеров и процессоров.
+Унифицированный интерфейс с поддержкой **kwargs.
 """
 
 import asyncio
@@ -20,7 +21,7 @@ logger = get_logger("parsing.base")
 
 
 class ParserConfig(BaseModel):
-    """Конфигурация парсера"""
+    """Конфигурация парсера с поддержкой динамических полей"""
 
     source_id: int
     source_name: str
@@ -34,14 +35,16 @@ class ParserConfig(BaseModel):
     )
     headers: Dict[str, str] = {}
 
+    # Динамические поля для специфичных конфигураций
     class Config:
         from_attributes = True
+        extra = "allow"  # Разрешаем дополнительные поля
 
 
 class BaseParser(ABC):
     """
     Абстрактный базовый класс для всех парсеров.
-    Все парсеры должны наследоваться от этого класса.
+    Унифицированный интерфейс с поддержкой **kwargs.
     """
 
     def __init__(self, config: ParserConfig):
@@ -64,12 +67,17 @@ class BaseParser(ABC):
         return self.config.source_name
 
     @abstractmethod
-    async def parse_recent(self, limit: int = 100) -> List[ParsedItem]:
+    async def parse(
+        self, limit: int = 100, **kwargs  # Все специфичные параметры передаются здесь
+    ) -> List[ParsedItem]:
         """
-        Парсинг последних элементов.
+        Унифицированный метод парсинга.
 
         Args:
             limit: Максимальное количество элементов
+            **kwargs: Параметры специфичные для конкретного парсера:
+                - Для TInvest: tickers=["SBER", "VTBR"]
+                - Для Lenta: categories=["Политика", "Экономика"]
 
         Returns:
             Список распарсенных элементов
@@ -77,15 +85,16 @@ class BaseParser(ABC):
         pass
 
     async def parse_period(
-        self, start_date: datetime, end_date: datetime, **kwargs
+        self, start_date: datetime, end_date: datetime, limit: int = 100, **kwargs
     ) -> List[ParsedItem]:
         """
-        Парсинг за период.
+        Парсинг за период (опциональный метод).
 
         Args:
             start_date: Начальная дата
             end_date: Конечная дата
-            **kwargs: Дополнительные параметры
+            limit: Максимальное количество элементов
+            **kwargs: Специфичные параметры
 
         Returns:
             Список распарсенных элементов
@@ -207,7 +216,13 @@ class BaseParser(ABC):
             self.logger.warning(f"Слишком короткий заголовок: {item.title}")
             return False
 
-        if not item.content or len(item.content.strip()) < 50:
+        # Меньше требований к контенту для Тинькофф Пульса
+        if self.source_name == "tinvest":
+            min_content_length = 10
+        else:
+            min_content_length = 50
+
+        if not item.content or len(item.content.strip()) < min_content_length:
             self.logger.warning(
                 f"Слишком короткий контент: {len(item.content)} символов"
             )
@@ -316,7 +331,7 @@ class AsyncParserIterator:
             raise StopAsyncIteration
 
         try:
-            items = await self.parser.parse_recent(
+            items = await self.parser.parse(
                 limit=self.batch_size, offset=self.current_page * self.batch_size
             )
 
