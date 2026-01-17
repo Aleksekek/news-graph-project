@@ -1,6 +1,6 @@
 """
 Асинхронный репозиторий для работы с Supabase.
-Использует пул соединений и ограничение параллелизма.
+Использует пул соединений, ограничение параллелизма и пакетные операции.
 """
 
 import asyncio
@@ -14,7 +14,7 @@ from asyncpg.exceptions import UniqueViolationError
 from asyncpg.pool import Pool
 
 from src.config.settings import settings
-from src.core.exceptions import DatabaseError
+from src.core.exceptions import DatabaseError, PermanentError
 from src.core.models import ArticleForDB, ProcessingStats
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
@@ -22,225 +22,213 @@ from src.utils.retry import async_retry
 logger = get_logger("storage.database")
 
 
+class DatabaseError(PermanentError):
+    """Перманентная ошибка, требующая прекращения retry."""
+
+    pass
+
+
 class DatabasePoolManager:
-    """Менеджер пула соединений с ограничением параллелизма"""
+    """Менеджер пула соединений с heartbeat для старых версий asyncpg."""
 
     _pool: Optional[Pool] = None
     _semaphore: Optional[asyncio.Semaphore] = None
+    _heartbeat_tasks: Set[asyncio.Task] = set()
 
     @classmethod
     async def get_pool(cls) -> Pool:
-        """Получение или создание пула соединений с ограничением"""
+        """Получение или создание пула с fallback и server_settings для таймаутов."""
         if cls._pool is None:
-            # Ограничиваем 3 одновременных соединения для Supabase
             cls._semaphore = asyncio.Semaphore(3)
 
-            cls._pool = await asyncpg.create_pool(
-                user=settings.DB_USER,
-                password=settings.DB_PASSWORD,
-                database=settings.DB_NAME,
-                host=settings.DB_HOST,
-                port=settings.DB_PORT,
-                min_size=1,
-                max_size=3,
-                command_timeout=60,
-            )
-            logger.info("✅ Пул соединений с БД создан (max_size=3)")
+            base_pool_kwargs = {
+                "user": settings.DB_USER,
+                "password": settings.DB_PASSWORD,
+                "database": settings.DB_NAME,
+                "host": settings.DB_HOST,
+                "port": settings.DB_PORT,
+                "min_size": 1,
+                "max_size": 3,
+                "command_timeout": 300,
+                "server_settings": {
+                    "statement_timeout": "300000",  # 5 мин на запрос
+                    "idle_in_transaction_session_timeout": "300000",  # 5 мин в транзакции
+                },
+            }
+
+            try:
+                pool_kwargs = base_pool_kwargs.copy()
+                pool_kwargs.update(
+                    {
+                        "keepalive_interval": 30,
+                        "keepalive_timeout": 10,
+                        "max_inactive_connection_lifetime": 0,
+                    }
+                )
+                cls._pool = await asyncpg.create_pool(**pool_kwargs)
+                logger.info("✅ Пул с keepalive создан")
+            except TypeError:
+                try:
+                    fallback_kwargs = base_pool_kwargs.copy()
+                    fallback_kwargs["max_inactive_connection_lifetime"] = 0
+                    cls._pool = await asyncpg.create_pool(**fallback_kwargs)
+                    logger.info("✅ Пул с max_inactive_connection_lifetime создан")
+
+                    # Запускаем heartbeat для поддержания соединения каждые 30 сек
+                    cls._start_heartbeat()
+                except TypeError:
+                    cls._pool = await asyncpg.create_pool(**base_pool_kwargs)
+                    logger.info("✅ Пул с базовыми параметрами создан")
+                    cls._start_heartbeat()
         return cls._pool
+
+    @classmethod
+    def _start_heartbeat(cls):
+        """Запуск heartbeat задачи для предотвращения закрытия соединений сервером."""
+
+        async def heartbeat():
+            while True:
+                await asyncio.sleep(30)
+                if cls._pool and not cls._pool._closed:
+                    try:
+                        async with cls.connection() as conn:
+                            await conn.fetchval("SELECT 1")
+                        logger.debug("💓 Heartbeat: соединение поддерживается")
+                    except Exception as e:
+                        logger.warning(f"💔 Heartbeat исключение: {e}")
+                else:
+                    break
+
+        task = asyncio.create_task(heartbeat())
+        cls._heartbeat_tasks.add(task)
+        task.add_done_callback(cls._heartbeat_tasks.discard)
 
     @classmethod
     @asynccontextmanager
     async def connection(cls) -> AsyncGenerator[asyncpg.Connection, None]:
-        """
-        Контекстный менеджер для получения соединения.
-        Автоматически управляет acquired/released.
-
-        Пример:
-            async with DatabasePoolManager.connection() as conn:
-                await conn.execute("SELECT 1")
-        """
+        """Контекстный менеджер для соединения."""
         pool = await cls.get_pool()
-
-        # Ограничиваем одновременные соединения
         async with cls._semaphore:
-            connection = await pool.acquire()
+            conn = await pool.acquire()
             try:
-                yield connection
+                yield conn
             finally:
-                await pool.release(connection)
+                await pool.release(conn)
+
+    @classmethod
+    async def reinitialize_pool_on_error(cls):
+        """Re-инициализация пула после небольшой паузы."""
+        await asyncio.sleep(1.0)  # Пауза перед re-init
+        if cls._pool:
+            try:
+                await cls._pool.close()
+            except Exception:
+                pass
+        cls._pool = None
+        cls._semaphore = None
+        for task in cls._heartbeat_tasks:
+            task.cancel()
+        cls._heartbeat_tasks.clear()
+        logger.info("🔄 Пул re-инициализирован после ошибки")
+        await cls.get_pool()
 
     @classmethod
     async def close_global_pool(cls):
-        """Глобальное закрытие пула соединений (только при завершении приложения)"""
+        """Закрытие пула и heartbeat задач."""
+        for task in cls._heartbeat_tasks:
+            task.cancel()
+        cls._heartbeat_tasks.clear()
         if cls._pool and not cls._pool._closed:
             await cls._pool.close()
-            cls._pool = None
-            cls._semaphore = None
-            logger.info("🔌 Глобальный пул соединений закрыт")
+        cls._pool = None
+        cls._semaphore = None
+        logger.info("🔌 Глобальный пул закрыт")
 
 
 class ArticleRepository:
-    """Асинхронный репозиторий для работы со статьями"""
-    
+    """Репозиторий для статей с пакетным сохранением и обработкой ошибок."""
+
     def __init__(self):
-        self.logger = get_logger(f"{self.__class__.__name__}")
-    
+        self.logger = get_logger(self.__class__.__name__)
+
     @asynccontextmanager
     async def _transaction(self) -> AsyncGenerator[asyncpg.Connection, None]:
-        """
-        Контекстный менеджер для выполнения операций в транзакции.
-        
-        Пример:
-            async with self._transaction() as conn:
-                await conn.execute("INSERT INTO ...")
-        """
+        """Транзакция."""
         async with DatabasePoolManager.connection() as conn:
             async with conn.transaction():
                 yield conn
 
     @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=2.0
+        exceptions=(
+            asyncpg.exceptions.PostgresError,
+        ),  # Исключаем InterfaceError из retry
+        max_attempts=3,
+        delay=2.0,
     )
     async def save_articles_batch(
         self, articles: List[ArticleForDB]
     ) -> ProcessingStats:
-        """
-        Пакетное сохранение статей в одной транзакции.
-
-        Args:
-            articles: Список статей для сохранения
-
-        Returns:
-            Статистика обработки
-        """
+        """Пакетное сохранение с фильтрацией дубликатов."""
         if not articles:
             return ProcessingStats()
 
         stats = ProcessingStats(total_rows=len(articles))
+        existing_urls = set()
 
-        async with self._transaction() as conn:
-            for i, article in enumerate(articles):
-                try:
-                    # Быстрая проверка дубликата
-                    is_duplicate = await self._check_duplicate_fast(conn, article.url)
-                    if is_duplicate:
-                        stats.skipped += 1
-                        continue
+        try:
+            async with self._transaction() as conn:
+                # Batch проверка дубликатов
+                source_ids = list(set(a.source_id for a in articles))
+                for sid in source_ids:
+                    rows = await conn.fetch(
+                        "SELECT url FROM raw_articles WHERE source_id = $1", sid
+                    )
+                    existing_urls.update({row["url"] for row in rows})
 
-                    # Сохраняем статью
-                    article_id = await self._save_article(conn, article)
+                unique_articles = [a for a in articles if a.url not in existing_urls]
+                stats.skipped += len(articles) - len(unique_articles)
+                if not unique_articles:
+                    return stats
 
-                    if article_id:
-                        stats.saved += 1
-                        # Логируем прогресс каждые 10 статей
-                        if stats.saved % 10 == 0:
-                            self.logger.debug(
-                                f"Прогресс: {stats.saved}/{len(articles)} сохранено"
-                            )
-                    else:
-                        stats.skipped += 1
+                # Batch insert
+                batch_data = []
+                for article in unique_articles:
+                    try:
+                        params = await self._prepare_article_params(article)
+                        batch_data.append(params)
+                    except Exception as e:
+                        self.logger.error(f"Ошибка подготовки: {e}")
+                        stats.errors += 1
 
-                except UniqueViolationError:
-                    # Дубликат обнаружен на уровне БД
-                    stats.skipped += 1
-                    self.logger.debug(f"Дубликат (уровень БД): {article.url}")
-                except Exception as e:
-                    stats.errors += 1
-                    self.logger.error(f"❌ Ошибка сохранения статьи {i}: {e}")
-                    # Продолжаем обработку остальных статей
-                    continue
+                if batch_data:
+                    sql = """
+                    INSERT INTO raw_articles (
+                        source_id, original_id, url, canonical_url, raw_title, raw_text, 
+                        raw_html, media_content, published_at, author, language, headers, status
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    """
+                    await conn.executemany(sql, batch_data)
+                    stats.saved += len(batch_data)
+                    self.logger.info(
+                        f"📦 Batch insert: {stats.saved} сохранено, {stats.skipped} пропущено"
+                    )
 
-        self.logger.info(
-            f"📦 Итог батча: {stats.saved} сохранено, "
-            f"{stats.skipped} пропущено, {stats.errors} ошибок"
-        )
+        except asyncpg.InterfaceError as e:
+            if "connection was closed" in str(e):
+                await DatabasePoolManager.reinitialize_pool_on_error()
+                raise PermanentError(
+                    f"Connection closed, re-init done: {e}"
+                )  # Не retry
+            raise
 
         return stats
 
-    async def _check_duplicate_fast(self, conn: asyncpg.Connection, url: str) -> bool:
-        """
-        Быстрая проверка дубликата по URL с использованием индекса.
-
-        Args:
-            conn: Соединение с БД
-            url: URL для проверки
-
-        Returns:
-            True если дубликат найден
-        """
-        try:
-            result = await conn.fetchval(
-                "SELECT 1 FROM raw_articles WHERE url = $1 LIMIT 1", url
-            )
-            return result is not None
-        except Exception as e:
-            self.logger.warning(f"Ошибка проверки дубликата: {e}")
-            # В случае ошибки предполагаем, что это не дубликат
-            # Лучше сохранить дубликат, чем потерять данные
-            return False
-
-    async def _save_article(
-        self, conn: asyncpg.Connection, article: ArticleForDB
-    ) -> Optional[int]:
-        """
-        Сохранение одной статьи.
-
-        Args:
-            conn: Соединение с БД
-            article: Статья для сохранения
-
-        Returns:
-            ID сохраненной статьи или None
-        """
-        try:
-            # Подготавливаем параметры
-            params = await self._prepare_article_params(article)
-
-            # SQL запрос
-            sql = """
-            INSERT INTO raw_articles (
-                source_id, original_id, url, canonical_url,
-                raw_title, raw_text, raw_html, media_content,
-                published_at, retrieved_at, author, language,
-                headers, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, $11, $12, $13)
-            RETURNING id;
-            """
-
-            # Выполняем запрос
-            result = await conn.fetchrow(sql, *params)
-
-            if result:
-                article_id = result["id"]
-                self.logger.debug(f"✅ Статья сохранена: {article_id}")
-                return article_id
-
-            return None
-
-        except UniqueViolationError:
-            # Конфликт уникальности - статья уже существует
-            return None
-        except Exception as e:
-            self.logger.error(f"Ошибка сохранения статьи: {e}")
-            raise
-
     async def _prepare_article_params(self, article: ArticleForDB) -> List[Any]:
-        """
-        Подготовка параметров для SQL запроса.
-
-        Args:
-            article: Статья
-
-        Returns:
-            Список параметров
-        """
-        # Ограничение длины полей для БД
+        """Подготовка параметров."""
         raw_title = (article.raw_title or "Без заголовка")[:500]
         raw_text = (article.raw_text or "")[:10000]
         raw_html = (article.raw_html or "")[:50000] if article.raw_html else None
         author = (article.author or "")[:255] if article.author else None
-
-        # Обработка JSON полей
         media_content = self._prepare_json_field(article.media_content)
         headers = self._prepare_json_field(article.headers)
 
@@ -261,156 +249,66 @@ class ArticleRepository:
         ]
 
     def _prepare_json_field(self, value: Any) -> Optional[Union[dict, list]]:
-        """
-        Подготовка JSON поля для сохранения в БД.
-
-        Args:
-            value: Значение поля
-
-        Returns:
-            Подготовленное значение или None
-        """
+        """Обработка JSON."""
         if value is None:
             return None
-
         if isinstance(value, (dict, list)):
             return value
-
         if isinstance(value, str):
             try:
-                parsed = json.loads(value) if value.strip() else None
-                if isinstance(parsed, (dict, list)):
-                    return parsed
+                return json.loads(value) if value.strip() else None
             except json.JSONDecodeError:
                 self.logger.warning(f"Некорректный JSON: {value[:100]}...")
-
         return None
 
     # ==================== ПОЛУЧЕНИЕ ДАННЫХ ====================
 
-    @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0
-    )
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_existing_urls_for_source(self, source_id: int) -> Set[str]:
-        """
-        Получение существующих URL для источника.
+        async with DatabasePoolManager.connection() as conn:
+            rows = await conn.fetch(
+                "SELECT url FROM raw_articles WHERE source_id = $1", source_id
+            )
+            urls = {row["url"] for row in rows}
+            self.logger.debug(f"📊 Загружено {len(urls)} URL для источника {source_id}")
+            return urls
 
-        Args:
-            source_id: ID источника
-
-        Returns:
-            Множество URL
-        """
-        async with self._pool_manager.acquire_connection() as conn:
-            try:
-                rows = await conn.fetch(
-                    "SELECT url FROM raw_articles WHERE source_id = $1", source_id
-                )
-                urls = {row["url"] for row in rows}
-
-                self.logger.debug(
-                    f"📊 Загружено {len(urls)} URL для источника {source_id}"
-                )
-                return urls
-
-            except Exception as e:
-                self.logger.error(f"❌ Ошибка получения URL: {e}")
-                return set()
-
-    @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0
-    )
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_raw_articles_for_processing(
         self, limit: int = 100, status: str = "raw"
     ) -> List[Dict[str, Any]]:
-        """
-        Получение сырых статей для NLP обработки.
-
-        Args:
-            limit: Лимит статей
-            status: Статус статей
-
-        Returns:
-            Список статей
-        """
-        async with self._pool_manager.acquire_connection() as conn:
-            try:
-                sql = """
-                SELECT 
-                    id, source_id, original_id, url,
-                    raw_title, raw_text, raw_html, media_content,
-                    published_at, author, language, headers
-                FROM raw_articles 
-                WHERE status = $1
-                ORDER BY published_at 
-                LIMIT $2
-                """
-
-                rows = await conn.fetch(sql, status, limit)
-                articles = [dict(row) for row in rows]
-
-                self.logger.debug(f"📄 Получено {len(articles)} статей для обработки")
-                return articles
-
-            except Exception as e:
-                self.logger.error(f"❌ Ошибка получения статей: {e}")
-                raise DatabaseError(f"Ошибка получения статей: {e}")
+        async with DatabasePoolManager.connection() as conn:
+            sql = """SELECT id, source_id, original_id, url, raw_title, raw_text, raw_html, media_content,
+                           published_at, author, language, headers FROM raw_articles 
+                     WHERE status = $1 ORDER BY published_at LIMIT $2"""
+            rows = await conn.fetch(sql, status, limit)
+            articles = [dict(row) for row in rows]
+            self.logger.debug(f"📄 Получено {len(articles)} статей")
+            return articles
 
     # ==================== СТАТИСТИКА ====================
 
-    @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0
-    )
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_processing_stats(
         self, source_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Получение статистики по обработке.
-
-        Args:
-            source_id: ID источника (опционально)
-
-        Returns:
-            Статистика
-        """
-        async with self._pool_manager.acquire_connection() as conn:
-            try:
-                if source_id:
-                    sql = """
-                    SELECT 
-                        COUNT(*) as total,
-                        COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw,
-                        COUNT(CASE WHEN status = 'processed' THEN 1 END) as processed,
-                        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
-                        MIN(published_at) as oldest,
-                        MAX(published_at) as newest
-                    FROM raw_articles 
-                    WHERE source_id = $1
-                    """
-                    result = await conn.fetchrow(sql, source_id)
-                else:
-                    sql = """
-                    SELECT 
-                        COUNT(*) as total,
-                        COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw,
-                        COUNT(CASE WHEN status = 'processed' THEN 1 END) as processed,
-                        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
-                        MIN(published_at) as oldest,
-                        MAX(published_at) as newest
-                    FROM raw_articles
-                    """
-                    result = await conn.fetchrow(sql)
-
-                if result:
-                    stats = dict(result)
-                    self.logger.debug(f"📊 Статистика: {stats}")
-                    return stats
-
-                return {}
-
-            except Exception as e:
-                self.logger.error(f"❌ Ошибка получения статистики: {e}")
-                return {}
+        async with DatabasePoolManager.connection() as conn:
+            if source_id:
+                sql = """SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw,
+                               COUNT(CASE WHEN status = 'processed' THEN 1 END) as processed, 
+                               COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed, 
+                               MIN(published_at) as oldest, MAX(published_at) as newest 
+                         FROM raw_articles WHERE source_id = $1"""
+                result = await conn.fetchrow(sql, source_id)
+            else:
+                sql = """SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw, 
+                               COUNT(CASE WHEN status = 'processed' THEN 1 END) as processed, 
+                               COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed, 
+                               MIN(published_at) as oldest, MAX(published_at) as newest FROM raw_articles"""
+                result = await conn.fetchrow(sql)
+            if result:
+                return dict(result)
+            return {}
 
     # ==================== ТЕСТ ПОДКЛЮЧЕНИЯ ====================
 
@@ -420,15 +318,17 @@ class ArticleRepository:
             async with DatabasePoolManager.connection() as conn:
                 # Быстрый тест
                 result = await conn.fetchval("SELECT 1")
-                
+
                 # Дополнительная проверка - можно ли выполнить простой запрос
                 test_table_exists = await conn.fetchval(
                     "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'raw_articles')"
                 )
-                
-                self.logger.debug(f"Тест подключения: result={result}, table_exists={test_table_exists}")
+
+                self.logger.debug(
+                    f"Тест подключения: result={result}, table_exists={test_table_exists}"
+                )
                 return result == 1
-                
+
         except asyncpg.exceptions.PostgresError as e:
             self.logger.error(f"❌ Ошибка БД при тесте: {e}")
             return False
@@ -438,9 +338,7 @@ class ArticleRepository:
 
     # ==================== NLP ОБРАБОТКА ====================
 
-    @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=2.0
-    )
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def save_processed_article(
         self,
         raw_article_id: int,
@@ -601,22 +499,7 @@ class ArticleRepository:
 
         return result["id"]
 
-    # ==================== УТИЛИТЫ ====================
-
-    async def cleanup(self):
-        """
-        Очистка ресурсов для ЭТОГО экземпляра репозитория.
-        Не закрывает глобальный пул!
-        """
-        # У этой версии репозитория нет собственных соединений,
-        # так как мы используем контекстные менеджеры.
-        # Просто логируем для отладки.
-        self.logger.debug("Очистка ресурсов репозитория")
-        # НЕ закрываем глобальный пул!
-        # await self._pool_manager.close_pool()  # <-- ЭТО УБИРАЕМ!
-
 
 # Фабрика для создания репозиториев
 def create_article_repository() -> ArticleRepository:
-    """Создание экземпляра репозитория"""
     return ArticleRepository()

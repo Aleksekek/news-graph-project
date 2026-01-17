@@ -41,3 +41,9 @@ class SourceNotFoundError(NewsGraphError):
     """Источник не найден"""
 
     pass
+
+
+class PermanentError(Exception):
+    """Ощибка для случаев, когда ретрай не помогает."""
+
+    pass

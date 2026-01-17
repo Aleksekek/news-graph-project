@@ -47,7 +47,12 @@ async def test_lenta_parser():
         stats = await use_case.execute(
             source_name="lenta",
             limit=2,
-            categories=["Политика", "Экономика", "Мир"],  # Передаем через kwargs
+            categories=[
+                "Политика",
+                "Экономика",
+                "Мир",
+                "Бывший СССР",
+            ],  # Передаем через kwargs
         )
 
         print(f"✅ Парсинг Lenta.ru завершен")
@@ -140,8 +145,8 @@ async def main():
         tests = [
             ("Подключение к БД", test_database_connection),
             ("Парсер Lenta.ru", test_lenta_parser),
-            #("Парсер Тинькофф Пульса", test_tinvest_parser),
-            #("Унифицированный интерфейс", test_unified_interface),
+            ("Парсер Тинькофф Пульса", test_tinvest_parser),
+            ("Унифицированный интерфейс", test_unified_interface),
         ]
 
         results = []
