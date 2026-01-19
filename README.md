@@ -8,6 +8,9 @@ news_graph_project/
 ├── requirements.txt               # Зависимости
 ├── README.md                      
 ├── Makefile                       
+├── test.py                        # Тесты
+├── test_db_connections.py         # Тесты подключения к БД
+├── test_full_integration.py       # Полные интеграционные тесты
 │
 ├── src/                           # Все исходники здесь
 │   │
@@ -68,11 +71,11 @@ news_graph_project/
 │   │       └── bot.py             # Основной бот
 │   │
 │   └── utils/                     # Вспомогательные утилиты
-│       ├── logging.py             # logging_config.py
-│       ├── data.py                # Jбщие data utils
+│       ├── logging.py             # Конфиг логирования
+│       ├── data.py                # Общие data utils
 │       └── retry.py               # Логика повторных попыток
 │
 └── scripts/                       # Скрипты запуска
     ├── run_parser.py              # Универсальный скрипт запуска
-    └── nlp_worker.py              # simple_nlp_worker.py
+    └── nlp_worker.py              
 ```
