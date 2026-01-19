@@ -1,0 +1,37 @@
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:18
+    container_name: news_graph_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 1g     # Максимум 1GB
+          cpus: 0.5      # Ограничение CPU 50%
+        reservations:
+          memory: 512m
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Опционально: скрипт инициализации
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf  # Конфиг аутентификации
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf  # Основной конфиг
+    ports:
+      - "0.0.0.0:5432:5432"  # Открыто для всех интерфейсов
+    networks:
+      - news_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  news_network:
