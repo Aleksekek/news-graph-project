@@ -52,7 +52,7 @@ CREATE TABLE raw_articles (
     
     -- Технические метаданные
     headers JSONB,                   -- HTTP-заголовки ответа (может пригодиться)
-    meta_data JSONB,                 -- Метаданные
+    meta_info JSONB,                 -- Метаданные
     status VARCHAR(20) DEFAULT 'raw' -- Статус: 'raw', 'processing', 'failed', 'parsed'
 );
 
