@@ -81,7 +81,6 @@ CREATE TABLE processed_articles (
     CONSTRAINT fk_raw_article FOREIGN KEY(raw_article_id) REFERENCES raw_articles(id)
 );
 
-
 -- Таблица связей статья-сущности (последняя, зависит от processed_articles и entities)
 CREATE TABLE article_entities (
     id BIGSERIAL PRIMARY KEY,

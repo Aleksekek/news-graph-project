@@ -1,0 +1,1 @@
+git clone -b database --single-branch https://github.com/Aleksekek/NewsGraphProject.git database

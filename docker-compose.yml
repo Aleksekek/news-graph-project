@@ -1,7 +1,7 @@
 # docker-compose.yml
 services:
   postgres:
-    image: postgres:18
+    image: pgvector/pgvector:pg18
     container_name: news_graph_db
     restart: unless-stopped
     environment:
@@ -16,7 +16,7 @@ services:
         reservations:
           memory: 512m
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Опционально: скрипт инициализации
       - ./pg_hba.conf:/etc/postgresql/pg_hba.conf  # Конфиг аутентификации
       - ./postgresql.conf:/etc/postgresql/postgresql.conf  # Основной конфиг
@@ -25,7 +25,7 @@ services:
     networks:
       - news_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]  # Теперь -d news_graph
       interval: 10s
       timeout: 5s
       retries: 5
