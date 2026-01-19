@@ -37,7 +37,6 @@ CREATE TABLE raw_articles (
     -- Идентификаторы и ссылки
     original_id VARCHAR(512),        -- ID из источника (если есть, для дедупликации)
     url TEXT UNIQUE,                 -- URL статьи. UNIQUE чтобы не парсить дважды
-    canonical_url TEXT,              -- Каноническая ссылка (если отличается от url)
     
     -- Сырые данные
     raw_title TEXT,                  -- Заголовок "как есть"
