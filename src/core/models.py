@@ -30,7 +30,6 @@ class ArticleForDB(BaseModel):
     source_id: int
     original_id: str
     url: str
-    canonical_url: Optional[str] = None
     raw_title: str
     raw_text: str
     raw_html: Optional[str] = None
@@ -101,7 +100,6 @@ class LentaArticle(BaseModel):
     published_time: Optional[datetime] = None
     keywords: List[str] = []
     description: Optional[str] = None
-    canonical_url: str
     media_content: List[Dict[str, Any]] = []
     paragraphs_count: int = 0
     word_count: int = 0

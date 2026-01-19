@@ -74,7 +74,7 @@ class ParseSourceUseCase:
 
             # 3. Создаем процессор и репозиторий
             processor = ProcessorFactory.create(source_name)
-            #repository = ArticleRepository()
+            # repository = ArticleRepository()
 
             # 4. Выполняем парсинг
             async with parser:
@@ -105,9 +105,6 @@ class ParseSourceUseCase:
                 try:
                     article_db = processor.to_article_db(item)
                     if article_db:
-                        # Убираем meta_info из модели если поле отсутствует в БД
-                        if hasattr(article_db, "meta_info"):
-                            article_db.meta_info = None
                         articles_db.append(article_db)
                 except Exception as e:
                     self.logger.error(f"Ошибка преобразования: {e}")

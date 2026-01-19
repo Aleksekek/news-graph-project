@@ -41,7 +41,6 @@ class TInvestProcessor(BaseProcessor):
             source_id=self.source_id,
             original_id=item.original_id,
             url=item.url,
-            canonical_url=None,
             raw_title=prepared_title,
             raw_text=prepared_text,
             raw_html=None,  # У постов ТП нет HTML
@@ -168,16 +167,3 @@ class TInvestProcessor(BaseProcessor):
 
         return None
         #return json.dumps(headers, ensure_ascii=False)
-
-    def generate_canonical_url(self, item: ParsedItem) -> Optional[str]:
-        """
-        Генерация канонического URL для Тинькофф Пульса.
-        Возвращает оригинальный URL.
-
-        Args:
-            item: ParsedItem
-
-        Returns:
-            Канонический URL
-        """
-        return item.url

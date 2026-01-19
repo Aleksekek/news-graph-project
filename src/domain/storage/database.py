@@ -203,8 +203,8 @@ class ArticleRepository:
                 if batch_data:
                     sql = """
                     INSERT INTO raw_articles (
-                        source_id, original_id, url, canonical_url, raw_title, raw_text, 
-                        raw_html, media_content, published_at, author, language, headers, status
+                        source_id, original_id, url, raw_title, raw_text, 
+                        raw_html, media_content, published_at, author, language, headers, meta_info, status
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     """
                     await conn.executemany(sql, batch_data)
@@ -236,7 +236,6 @@ class ArticleRepository:
             article.source_id,
             article.original_id,
             article.url,
-            article.canonical_url,
             raw_title,
             raw_text,
             raw_html,
@@ -245,6 +244,7 @@ class ArticleRepository:
             author,
             article.language or "ru",
             headers,
+            article.meta_info,
             article.status or "raw",
         ]
 

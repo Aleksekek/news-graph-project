@@ -25,7 +25,7 @@ class LentaParser(BaseParser):
     Унифицированный интерфейс с поддержкой **kwargs.
     """
 
-    def __init__(self, config: ParserConfig):
+    def __init__(self, config: ParserConfig, max_concurrent_requests: int = 5):
         super().__init__(config)
 
         # Настройки специфичные для Lenta
@@ -39,6 +39,9 @@ class LentaParser(BaseParser):
         # Кэширование
         self._last_rss_fetch = None
         self._rss_cache = []
+
+        # Асинхронная загрузка
+        self.max_concurrent_requests = max_concurrent_requests
 
     @log_async_execution_time()
     async def parse(
@@ -110,8 +113,8 @@ class LentaParser(BaseParser):
         start_date: datetime,
         end_date: datetime,
         limit: int = 100,
-        max_articles_per_day: int = 20,
-        max_pages_per_day: int = 5,
+        max_articles_per_day: int = 999,
+        max_pages_per_day: int = 999,
         skip_existing_urls: Optional[Set[str]] = None,
         categories: Optional[List[str]] = None,
         **kwargs,
@@ -201,7 +204,9 @@ class LentaParser(BaseParser):
                             time.mktime(entry.published_parsed)
                         )
                         # Переводим обратно в UTC+3
-                        published_dt = published_dt.replace(hour=(published_dt.hour + 3) % 24)
+                        published_dt = published_dt.replace(
+                            hour=(published_dt.hour + 3) % 24
+                        )
 
                     items.append(
                         {
@@ -281,7 +286,7 @@ class LentaParser(BaseParser):
         skip_existing_urls: Optional[Set[str]] = None,
         categories: Optional[List[str]] = None,
     ) -> List[ParsedItem]:
-        """Парсинг одного дня архива"""
+        """Парсинг одного дня архива с параллельной загрузкой в батчах"""
         date_str = date.strftime("%Y/%m/%d")
         archive_url = f"{self.archive_base_url}/{date_str}/"
 
@@ -300,141 +305,177 @@ class LentaParser(BaseParser):
             article_urls = article_urls[:max_articles_per_day]
             self.logger.info(f"Ограничено до {max_articles_per_day} статей")
 
-        # Парсим статьи
+        # Параллельная загрузка в батчах
         parsed_items = []
-        for i, url in enumerate(article_urls):
-            # Пропускаем существующие
-            if skip_existing_urls and url in skip_existing_urls:
-                self.logger.debug(f"Пропускаем существующую статью: {url}")
-                continue
+        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
 
-            try:
-                self.logger.debug(f"Парсинг статьи {i+1}/{len(article_urls)}: {url}")
+        async def parse_article_with_semaphore(url: str):
+            async with semaphore:
+                try:
+                    result = await self._parse_article_page(url)
+                    return result
+                except Exception as e:
+                    self.logger.error(f"Ошибка парсинга {url}: {e}")
+                    return None
 
-                article_data = await self._parse_article_page(url)
+        batch_size = self.max_concurrent_requests
+        total_urls = len(article_urls)
 
-                if article_data:
-                    # Создаем ParsedItem
-                    parsed_item = ParsedItem(
-                        source_id=self.source_id,
-                        source_name=self.source_name,
-                        original_id=self._generate_article_id(
-                            url, article_data["published_time"]
-                        ),
-                        url=url,
-                        title=article_data["title"],
-                        content=article_data["content"],
-                        published_at=article_data["published_time"],
-                        author=article_data["author"],
-                        metadata={
-                            "category": article_data["category"],
-                            "description": article_data["description"],
-                            "archive_date": date.date().isoformat(),
-                            "text_length": article_data["text_length"],
-                        },
-                        raw_data={"html": article_data["html"]},
-                    )
+        for batch_start in range(0, total_urls, batch_size):
+            batch_urls = article_urls[batch_start : batch_start + batch_size]
+            batch_num = batch_start // batch_size + 1
+            total_batches = (total_urls + batch_size - 1) // batch_size
 
-                    if self.validate_item(parsed_item):
-                        parsed_items.append(parsed_item)
+            self.logger.debug(f"Парсим батч {batch_num}/{total_batches}: {len(batch_urls)} статей")
 
-                    # Задержка между запросами
-                    if i < len(article_urls) - 1:
-                        await self.delay_between_requests()
+            # Параллельная загрузка батча
+            batch_results = await asyncio.gather(
+                *[parse_article_with_semaphore(url) for url in batch_urls],
+                return_exceptions=False  # Исключения уже обработаны внутри
+            )
 
-            except Exception as e:
-                self.logger.error(f"Ошибка парсинга статьи {url}: {e}")
-                continue
+            for url, result in zip(batch_urls, batch_results):
+                if not result:
+                    continue
+
+                # Создаем ParsedItem
+                parsed_item = ParsedItem(
+                    source_id=self.source_id,
+                    source_name=self.source_name,
+                    original_id=self._generate_article_id(
+                        url, result["published_time"]
+                    ),
+                    url=result["url"],
+                    title=result["title"],
+                    content=result["content"],
+                    published_at=result["published_time"],
+                    author=result["author"],
+                    metadata={
+                        "category": result["category"],
+                        "description": result["description"],
+                        "archive_date": date.date().isoformat(),
+                        "text_length": result["text_length"],
+                    },
+                    raw_data={"html": result["html"]},
+                )
+
+                # Пропускаем существующие
+                if skip_existing_urls and url in skip_existing_urls:
+                    self.logger.debug(f"Пропускаем существующую статью: {url}")
+                    continue
+
+                if self.validate_item(parsed_item):
+                    parsed_items.append(parsed_item)
+
+            self.logger.debug(f"Батч {batch_num}/{total_batches} завершен: +{len([r for r in batch_results if r])} статей")
+
+            # Небольшая пауза между батчами (для rate limit)
+            if batch_start + batch_size < total_urls:
+                await asyncio.sleep(0.5)
+
+        self.logger.info(f"День {date.date()}: распарсено {len(parsed_items)} статей")
 
         return parsed_items
 
     async def _get_article_links_from_archive(
         self,
         archive_url: str,
-        max_pages: int = 5,
+        max_pages: int = 10,
         categories: Optional[List[str]] = None,
     ) -> List[str]:
         """Получение ссылок на статьи из архивной страницы"""
         self.logger.debug(f"Поиск статей в архиве: {archive_url}")
+        if categories:
+            self.logger.info(f"Фильтр по категориям: {categories}")
 
         all_urls = []
         current_page = 1
 
         while current_page <= max_pages:
-            # Формируем URL страницы
             if current_page == 1:
                 page_url = archive_url
             else:
-                page_url = f"{archive_url.rstrip('/')}/page/{current_page}/"
+                if archive_url.endswith("/"):
+                    page_url = archive_url[:-1] + f"/page/{current_page}/"
+                else:
+                    page_url = archive_url + f"/page/{current_page}/"
+
+            self.logger.debug(f"Загружаем страницу {current_page}: {page_url}")
 
             try:
                 html = await self.fetch_url(page_url)
                 soup = BeautifulSoup(html, "html.parser")
 
-                # Ищем ссылки на статьи
-                article_links = []
+                # Находим все карточки новостей
+                news_cards = soup.find_all(class_="card-full-news")
 
-                # Паттерн для ссылок Lenta.ru
-                link_patterns = [
-                    r"/news/\d{4}/\d{2}/\d{2}/[^/]+/$",
-                    r"/articles/\d{4}/\d{2}/\d{2}/[^/]+/$",
-                ]
+                page_links = []
 
-                for a_tag in soup.find_all("a", href=True):
-                    href = a_tag["href"]
+                for card in news_cards:
+                    href = ""
+                    if card.name == "a" and "href" in card.attrs:
+                        href = card.get("href", "")
+                    else:
+                        link = card.find("a", href=True)
+                        if link:
+                            href = link.get("href", "")
 
-                    # Проверяем паттерны
-                    for pattern in link_patterns:
-                        if re.match(pattern, href):
-                            full_url = urljoin(self.base_url, href)
-                            if full_url not in article_links:
-                                article_links.append(full_url)
+                    if not href or not href.startswith("/"):
+                        continue
 
-                # Если нет ссылок, прекращаем пагинацию
-                if not article_links:
+                    # Фильтрация по категориям
+                    if categories:
+                        category = ""
+                        rubric_elem = card.find("span", class_="card-full-news__rubric")
+                        if rubric_elem:
+                            category = rubric_elem.get_text(strip=True)
+                        if not category or category not in categories:
+                            continue
+
+                    # Формируем полный URL
+                    full_url = urljoin(self.base_url, href)
+                    if "/news/" in full_url or "/articles/" in full_url:
+                        page_links.append(full_url)
+
+                # Запасной вариант: регулярка
+                if not page_links:
+                    self.logger.debug("Пробуем регулярку")
+                    html_text = html
+                    pattern = r'href=["\'](/news/\d{4}/\d{2}/\d{2}/[^"\']*?/)["\']'
+                    matches = re.findall(pattern, html_text)
+                    self.logger.debug(f"По регулярке: {len(matches)}")
+                    for match in matches:
+                        full_url = urljoin(self.base_url, match)
+                        if full_url not in page_links:
+                            page_links.append(full_url)
+
+                # Убираем дубликаты
+                unique_links = list(set(page_links))
+
+                # Проверяем лимит страниц
+                if current_page >= max_pages:
                     break
 
-                # Фильтруем по категориям если указаны
-                if categories:
-                    filtered_links = []
-                    for url in article_links:
-                        # Парсим категорию из URL или страницы
-                        # (упрощенная логика, можно улучшить)
-                        category_match = re.search(
-                            r"/news/\d{4}/\d{2}/\d{2}/([^/]+)/", url
-                        )
-                        if category_match:
-                            url_category = category_match.group(1)
-                            if any(
-                                cat.lower() in url_category.lower()
-                                for cat in categories
-                            ):
-                                filtered_links.append(url)
+                # Если нет новых ссылок, прекращаем
+                existing_urls = set(all_urls)
+                new_links = [url for url in unique_links if url not in existing_urls]
+                if not new_links:
+                    self.logger.debug(f"Нет новых ссылок на странице {current_page}")
+                    break
 
-                    article_links = filtered_links
-
-                all_urls.extend(article_links)
-
+                all_urls.extend(new_links)
                 self.logger.debug(
-                    f"Страница {current_page}: найдено {len(article_links)} ссылок "
-                    f"(всего: {len(all_urls)})"
+                    f"Страница {current_page}: +{len(new_links)} (всего: {len(all_urls)})"
                 )
-
-                # Проверяем наличие следующей страницы
-                next_page_link = soup.find(
-                    "a", class_=lambda x: x and "next" in x.lower()
-                )
-                if not next_page_link:
-                    break
 
                 current_page += 1
                 await self.delay_between_requests()
 
             except Exception as e:
-                self.logger.error(f"Ошибка загрузки архивной страницы {page_url}: {e}")
+                self.logger.error(f"Ошибка страницы {page_url}: {e}")
                 break
 
-        # Убираем дубликаты
+        # Финальные уникальные
         unique_urls = list(set(all_urls))
         self.logger.info(f"Найдено {len(unique_urls)} уникальных статей")
 

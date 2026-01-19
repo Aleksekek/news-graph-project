@@ -39,11 +39,6 @@ class LentaProcessor(BaseProcessor):
         meta_info = self.extract_lenta_meta_info(item, raw_data)
         meta_info_json = dict_to_json_safe(meta_info) if meta_info else None
 
-        # Канонический URL (оригинальный URL из RSS)
-        canonical_url = raw_data.get("rss", {}).get("link")
-        if canonical_url == item.url:
-            canonical_url = None
-
         # Подготавливаем текст и заголовок
         prepared_title = self.prepare_title_for_db(item.title)
         prepared_text = self.prepare_text_for_db(item.content)
@@ -53,7 +48,6 @@ class LentaProcessor(BaseProcessor):
             source_id=self.source_id,
             original_id=item.original_id,
             url=item.url,
-            canonical_url=canonical_url,
             raw_title=prepared_title,
             raw_text=prepared_text,
             raw_html=raw_html if raw_html else None,
@@ -118,15 +112,11 @@ class LentaProcessor(BaseProcessor):
             Словарь с мета-информацией
         """
         meta_info = {
-            "source": "lenta.ru",
-            "domain": extract_domain(item.url),
             "category": item.metadata.get("category", ""),
-            "description": item.metadata.get("description", ""),
             "text_length": item.metadata.get("text_length", len(item.content)),
-            "paragraphs_count": item.metadata.get("paragraphs_count"),
-            "word_count": item.metadata.get("word_count"),
             "archive_date": item.metadata.get("archive_date"),
             "has_images": item.metadata.get("has_images", False),
+            "domain": extract_domain(item.url),
         }
 
         # Добавляем данные из RSS
@@ -161,22 +151,3 @@ class LentaProcessor(BaseProcessor):
 
         return None
         #return json.dumps(headers, ensure_ascii=False)
-
-    def generate_canonical_url(self, item: ParsedItem) -> Optional[str]:
-        """
-        Генерация канонического URL для Lenta.ru.
-        Использует оригинальный URL из RSS если он отличается.
-
-        Args:
-            item: ParsedItem
-
-        Returns:
-            Канонический URL
-        """
-        raw_data = item.raw_data or {}
-        rss_url = raw_data.get("rss", {}).get("link", "")
-
-        if rss_url and rss_url != item.url:
-            return rss_url
-
-        return item.url

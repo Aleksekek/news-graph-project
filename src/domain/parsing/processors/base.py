@@ -99,19 +99,6 @@ class BaseProcessor(ABC):
 
         return dict_to_json_safe(meta_info)
 
-    def generate_canonical_url(self, item: ParsedItem) -> Optional[str]:
-        """
-        Генерация канонического URL.
-        Может быть переопределен в дочерних классах.
-
-        Args:
-            item: ParsedItem
-
-        Returns:
-            Канонический URL или None
-        """
-        return item.url
-
     def prepare_text_for_db(self, text: str, max_length: int = 10000) -> str:
         """
         Подготовка текста для сохранения в БД.
