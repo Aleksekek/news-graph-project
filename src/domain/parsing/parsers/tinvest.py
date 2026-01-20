@@ -1,436 +1,410 @@
 """
 Парсер Тинькофф Пульса с унифицированным интерфейсом.
+Полностью асинхронная реализация без pandas, с расширенным сбором данных.
 """
 
 import asyncio
-import time
+import hashlib
+import json
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
-import pandas as pd
+import aiohttp
 from tpulse import TinkoffPulse
 
 from src.core.exceptions import ParserError
 from src.domain.parsing.base import BaseParser, ParsedItem, ParserConfig
 from src.utils.data import safe_datetime, safe_int, safe_list, safe_str
 from src.utils.logging import log_async_execution_time
-from src.utils.retry import retry_network
+from src.utils.retry import async_retry
 
 
 class TInvestParser(BaseParser):
     """
-    Парсер Тинькофф Пульса с унифицированным интерфейсом.
-    Обертка над существующей библиотекой tpulse с async интерфейсом.
+    Парсер Тинькофф Пульса с полностью асинхронной реализацией.
+    Обертка над библиотекой tpulse с расширенным сбором данных и поддержкой курсоров.
     """
 
     def __init__(self, config: ParserConfig):
         super().__init__(config)
 
-        # Инициализация синхронного парсера
+        # Синхронный парсер tpulse (для async обертки)
         self.tp = TinkoffPulse()
 
         # Настройки
-        self.sleep_interval = 2000
-        self.sleep_duration = 30
-        self.checkpoint_interval = 500
+        self.tickers = getattr(config, "tickers", ["SBER", "VTBR", "MOEX"])
 
-        # Тикеры из конфигурации
-        self.default_tickers = getattr(config, "tickers", ["SBER", "VTBR", "MOEX"])
+        # Настройки пагинации и буферов
+        self.batch_size = 50  # Размер батча для запросов (можно адаптировать)
+        self.max_batches_per_ticker = 100  # Ограничение для rate limiting
 
     @log_async_execution_time()
     async def parse(
         self,
         limit: int = 100,
         tickers: Optional[List[str]] = None,
-        **kwargs,  # Игнорируем лишние параметры
+        **kwargs,  # title_filters, author_filters, has_images etc.
     ) -> List[ParsedItem]:
         """
-        Унифицированный метод парсинга Тинькофф Пульса.
+        Унифицированный метод парсинга свежих постов Тинькофф Пульса.
 
         Args:
             limit: Максимальное количество постов в сумме
-            tickers: Список тикеров для парсинга (если None, берем из конфига)
-            **kwargs: Дополнительные параметры (игнорируются)
+            tickers: Список тикеров (если None, берем из конфига)
+            **kwargs: Специфичные фильтры (например, min_reactions=10)
 
         Returns:
             Список ParsedItem
         """
-        # Используем переданные тикеры или из конфига
-        target_tickers = tickers if tickers else self.default_tickers
+        target_tickers = tickers or self.tickers
 
-        self.logger.info(f"Парсинг Тинькофф Пульса: {target_tickers} (лимит: {limit})")
+        self.logger.info(
+            f"Парсинг свежих постов TInvest для тикеров {target_tickers}, лимит: {limit}"
+        )
 
         all_items = []
+        seen_ids = set()
 
-        # Распределяем лимит по тикерам
-        limit_per_ticker = max(limit // len(target_tickers), 1)
-
-        for ticker in target_tickers:
+        # Изменение: всегда обрабатываем все тикеры, дедуплицируем глобально в конце
+        for ticker_idx, ticker in enumerate(target_tickers):
             try:
-                ticker_items = await self._parse_ticker_posts(ticker, limit_per_ticker)
-                all_items.extend(ticker_items)
+                self.logger.info(
+                    f"Обработка тикера {ticker} ({ticker_idx + 1}/{len(target_tickers)})"
+                )
 
-                self.logger.info(f"Тикер {ticker}: {len(ticker_items)} постов")
+                ticker_items = await self._fetch_fresh_posts(
+                    ticker,
+                    limit_per_ticker=limit,
+                    filters=kwargs,  # Дать шанс набрать больше kandидатов
+                )
 
-                # Задержка между тикерами
-                if ticker != target_tickers[-1]:
-                    await asyncio.sleep(5)
+                self.logger.info(
+                    f"Для тикера {ticker} получено {len(ticker_items)} кандидат-постов"
+                )
+
+                # Дедупликация по original_id (локальная для тикера, но seen_ids глобальный)
+                new_unique = 0
+                for item in ticker_items:
+                    if item.original_id not in seen_ids:
+                        all_items.append(item)
+                        seen_ids.add(item.original_id)
+                        new_unique += 1
+                    else:
+                        self.logger.debug(f"Дубликат поста {item.original_id} пропущен")
+
+                self.logger.info(
+                    f"Новых уникальных постов для {ticker}: {new_unique} (всего уникальных: {len(all_items)})"
+                )
 
             except Exception as e:
                 self.logger.error(f"Ошибка парсинга тикера {ticker}: {e}")
                 continue
 
-        self.logger.info(f"Всего распарсено: {len(all_items)} постов")
+        # Сортировка по дате публикации (новые первые)
+        all_items.sort(key=lambda x: x.published_at or datetime.min, reverse=True)
+
+        self.logger.info(
+            f"Всего собрано {len(all_items)} уникальных постов из {len(target_tickers)} тикеров"
+        )
+
         return all_items
 
     @log_async_execution_time()
     async def parse_period(
-        self, start_date: datetime, end_date: datetime, limit: int = 100, **kwargs
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        limit: int = 100,
+        start_cursor: Optional[str] = None,  # Поддержка курсора
+        tickers: Optional[List[str]] = None,
+        **kwargs,
     ) -> List[ParsedItem]:
         """
-        Архивный парсинг Тинькофф Пульса.
-        TInvest API не поддерживает прямую фильтрацию по дате,
-        поэтому парсим пока не достигнем нужной даты.
+        Архивный парсинг за период с поддержкой курсора для продолжаемого парсинга.
+
+        Args:
+            start_date: Начальная дата
+            end_date: Конечная дата
+            limit: Общий лимит
+            start_cursor: Курсор для продолжения (если None, начинаем заново)
+            tickers: Фильтр тикеров
+            **kwargs: Дополнительные фильтры
+
+        Returns:
+            Список ParsedItem с курсором в metadata последней записи
         """
+        target_tickers = tickers or self.tickers
+
         self.logger.info(
-            f"Архивный парсинг TInvest: {start_date.date()} - {end_date.date()}"
+            f"Архивный парсинг TInvest: {start_date.date()} - {end_date.date()} для {target_tickers}"
         )
 
-        tickers = kwargs.get("tickers", self.default_tickers)
         all_items = []
+        current_cursor = start_cursor
 
-        for ticker in tickers:
-            try:
-                ticker_items = await self._parse_ticker_archive(
-                    ticker, start_date, end_date, limit
-                )
-                all_items.extend(ticker_items)
-                self.logger.info(f"Тикер {ticker}: {len(ticker_items)} постов")
+        for ticker in target_tickers:
+            ticker_items, final_cursor = await self._fetch_historical_posts(
+                ticker, start_date, end_date, limit, current_cursor, kwargs
+            )
+            all_items.extend(ticker_items)
+            if final_cursor and not start_cursor:
+                # Сохраняем курсор для продолжения в следующей сессии
+                pass  # Будет в metadata
 
-                # Задержка между тикерами
-                if ticker != tickers[-1]:
-                    await asyncio.sleep(5)
-
-            except Exception as e:
-                self.logger.error(f"Ошибка архивного парсинга тикера {ticker}: {e}")
-                continue
+        # Добавляем курсор в последнюю запись для чекпоинта
+        if all_items:
+            all_items[-1].metadata["cursor"] = final_cursor
 
         return all_items
 
-    async def _parse_ticker_archive(
-        self, ticker: str, start_date: datetime, end_date: datetime, max_posts: int
+    async def _fetch_fresh_posts(
+        self, ticker: str, limit_per_ticker: int, filters: Dict[str, Any]
     ) -> List[ParsedItem]:
-        """Парсинг постов за период для конкретного тикера"""
-        self.logger.debug(f"Архивный парсинг тикера: {ticker}")
-
-        loop = asyncio.get_event_loop()
-        all_items = []
+        """Получение свежих постов для тикера с фильтрами"""
+        items = []
         cursor = None
-        has_more = True
+        batches_loaded = 0
 
-        while has_more and len(all_items) < max_posts:
-            try:
-                # Вызываем синхронный код в отдельном потоке
-                data = await loop.run_in_executor(
-                    None, self._make_request_with_retry_sync, ticker, cursor
-                )
+        while (
+            len(items) < limit_per_ticker
+            and batches_loaded < self.max_batches_per_ticker
+        ):
+            batch_data = await self._make_async_request(ticker, cursor=cursor)
 
-                if not data or not data.get("items"):
-                    break
-
-                # Обрабатываем посты
-                for post in data["items"]:
-                    if len(all_items) >= max_posts:
-                        break
-
-                    # Проверяем дату поста
-                    post_date = self._extract_post_date(post)
-                    if post_date and post_date < start_date:
-                        has_more = False
-                        break
-
-                    if post_date and post_date <= end_date:
-                        try:
-                            post_data = self._extract_post_data(post, ticker)
-                            df_row = pd.Series(post_data)
-                            parsed_item = self._row_to_parsed_item(df_row, ticker)
-
-                            if parsed_item and self.validate_item(parsed_item):
-                                all_items.append(parsed_item)
-                        except Exception as e:
-                            self.logger.error(f"Ошибка обработки поста: {e}")
-                            continue
-
-                # Пагинация
-                if data.get("hasNext", False) and data.get("nextCursor"):
-                    cursor = data["nextCursor"]
-                    await asyncio.sleep(self.config.request_delay)
-                else:
-                    break
-
-            except Exception as e:
-                self.logger.error(f"Ошибка архивного парсинга: {e}")
+            if not batch_data or not batch_data.get("items"):
                 break
 
-        return all_items
+            batch_items = self._process_batch(batch_data["items"], ticker, filters)
+            items.extend(batch_items)
 
-    def _extract_post_date(self, post: Dict[str, Any]) -> Optional[datetime]:
-        """Извлечение даты поста"""
-        try:
-            inserted = post.get("inserted", "")
-            if inserted:
-                utc_time = datetime.fromisoformat(inserted.replace("Z", "+00:00"))
-                return utc_time
-        except Exception:
-            pass
-        return None
+            # Ограничиваем по лимиту
+            if len(items) > limit_per_ticker:
+                items = items[:limit_per_ticker]
 
-    async def _parse_ticker_posts(self, ticker: str, limit: int) -> List[ParsedItem]:
-        """Парсинг постов по конкретному тикеру"""
-        self.logger.debug(f"Парсинг тикера: {ticker}")
+            cursor = batch_data.get("nextCursor")
+            if not cursor or not batch_data.get("hasNext", False):
+                break
 
-        # Используем синхронный вызов в thread pool
-        loop = asyncio.get_event_loop()
+            batches_loaded += 1
+            # Задержка между батчами
+            if batches_loaded > 0 and self.config.request_delay > 0:
+                await asyncio.sleep(self.config.request_delay)
 
-        try:
-            df = await loop.run_in_executor(
-                None, self._get_posts_dataframe_sync, ticker, limit
+        return items
+
+    async def _fetch_historical_posts(
+        self,
+        ticker: str,
+        start_date: datetime,
+        end_date: datetime,
+        limit: int,
+        start_cursor: str,
+        filters: Dict[str, Any],
+    ) -> tuple[List[ParsedItem], Optional[str]]:
+        """Исторический парсинг с фильтром по дате и курсором"""
+        self.logger.debug(
+            f"Начало исторического парсинга тикера {ticker}: {start_date} - {end_date}"
+        )
+        self.logger.debug(f"Курсоры: стартовый {start_cursor}, лимит: {limit}")
+
+        items = []
+        cursor = start_cursor
+        final_cursor = None
+        batches_loaded = 0
+
+        # Преобразуем даты для сравнения (наивные datetime), включая конец дня
+        start_naive = start_date.replace(tzinfo=None)
+        # Конец дня: добавляем день, ставим начало, минус микросекунда = 23:59:59.999
+        end_naive = (end_date.replace(tzinfo=None) + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(microseconds=1)
+
+        self.logger.debug(
+            f"Диапазон дат включительно: {start_naive} ({start_date.date()}) - {end_naive} ({end_date.date()}, конец дня)"
+        )
+
+        found_older_than_start = (
+            False  # Флаг для остановки при выходе за начало диапазона
+        )
+
+        while len(items) < limit and not found_older_than_start:
+            if found_older_than_start:
+                self.logger.debug(
+                    "Остановка парсинга: найдены посты старше начала диапазона"
+                )
+                break
+
+            batch_version = batches_loaded + 1
+            self.logger.debug(
+                f"Загрузка батча {batch_version} для {ticker}, курсор: {cursor}"
             )
 
-            if df.empty:
-                self.logger.warning(f"Нет постов для тикера {ticker}")
-                return []
+            batch_data = await self._make_async_request(ticker, cursor=cursor)
 
-            # Конвертируем DataFrame в ParsedItem
-            parsed_items = []
-            for _, row in df.iterrows():
-                try:
-                    parsed_item = self._row_to_parsed_item(row, ticker)
-                    if parsed_item and self.validate_item(parsed_item):
-                        parsed_items.append(parsed_item)
-                except Exception as e:
-                    self.logger.error(f"Ошибка конвертации строки: {e}")
-                    continue
-
-            return parsed_items
-
-        except Exception as e:
-            raise ParserError(f"Ошибка парсинга тикера {ticker}: {e}")
-
-    def _get_posts_dataframe_sync(self, ticker: str, num_posts: int) -> pd.DataFrame:
-        """Синхронный метод получения постов"""
-        all_posts = []
-        cursor = None
-        posts_loaded = 0
-
-        while posts_loaded < num_posts:
-            # Пауза при достижении интервала
-            if (
-                posts_loaded > 0
-                and posts_loaded > 35
-                and posts_loaded % self.sleep_interval in range(30)
-            ):
-                self.logger.info(
-                    f"Пауза {self.sleep_duration} сек после {posts_loaded} постов"
+            if not batch_data or not batch_data.get("items"):
+                self.logger.debug(
+                    f"Пустой батч {batch_version} или конец данных для {ticker}"
                 )
-                time.sleep(self.sleep_duration)
-
-            # Получаем данные
-            data = self._make_request_with_retry_sync(ticker, cursor)
-
-            if not data or not data.get("items"):
                 break
 
-            # Обрабатываем посты
-            for post in data["items"]:
-                if posts_loaded >= num_posts:
+            final_cursor = batch_data.get("nextCursor")
+            posts_in_batch = len(batch_data["items"])
+            self.logger.debug(
+                f"Батч {batch_version}: получено {posts_in_batch} постов, следующий курсор: {final_cursor}"
+            )
+
+            posts_processed = 0
+            posts_added = 0
+            posts_filtered = 0
+            seen_in_range = False
+
+            for post in batch_data["items"]:
+                if len(items) >= limit:
+                    self.logger.debug(f"Достигнут глобальный лимит {limit} постов")
                     break
 
-                try:
-                    post_data = self._extract_post_data(post, ticker)
-                    all_posts.append(post_data)
-                    posts_loaded += 1
-
-                except Exception as e:
-                    self.logger.error(f"Ошибка обработки поста: {e}")
+                post_date = self._extract_post_date(post)
+                if not post_date:
+                    self.logger.debug("Не удалось извлечь дату поста (пропущен)")
                     continue
 
-            # Пагинация
-            if data.get("hasNext", False) and data.get("nextCursor"):
-                cursor = data["nextCursor"]
-                time.sleep(self.config.request_delay)
-            else:
-                break
+                posts_processed += 1
 
-        # Создаем DataFrame
-        df = pd.DataFrame(all_posts)
-
-        if not df.empty and "date" in df.columns and "time" in df.columns:
-            df["datetime"] = pd.to_datetime(
-                df["date"].astype(str) + " " + df["time"].astype(str)
-            )
-            df = df.sort_values("datetime", ascending=False).reset_index(drop=True)
-            df = df.drop("datetime", axis=1)
-
-        return df
-
-    def _make_request_with_retry_sync(
-        self, ticker: str, cursor: Optional[str] = None, max_retries: int = 3
-    ) -> Optional[Dict[str, Any]]:
-        """Синхронный запрос с повторными попытками"""
-        for attempt in range(max_retries):
-            try:
-                if attempt > 0:
-                    delay = self.config.request_delay * (2**attempt)
-                    self.logger.warning(
-                        f"Повторная попытка {attempt + 1}/{max_retries} через {delay} сек"
+                if post_date < start_naive:
+                    self.logger.debug(
+                        f"Пост от {post_date.date()} старше начала диапазона, оставшиеся в батче и все следующие пропущены"
                     )
-                    time.sleep(delay)
+                    found_older_than_start = True
+                    break  # Прекращаем этот батч
+                elif post_date > end_naive:
+                    self.logger.debug(
+                        f"Пост от {post_date.date()} слишком свежий (пропущен)"
+                    )
+                    pass  # Просто пропускаем
                 else:
-                    time.sleep(self.config.request_delay)
+                    # Пост в диапазоне
+                    seen_in_range = True
+                    parsed_item = self._post_to_parsed_item(post, ticker)
+                    if parsed_item and self._apply_filters(parsed_item, filters):
+                        items.append(parsed_item)
+                        posts_added += 1
+                    else:
+                        posts_filtered += 1
+                        self.logger.debug(f"Фильтр отклонил пост от {post_date.date()}")
 
-                return self.tp.get_posts_by_ticker(ticker, cursor=cursor)
+            self.logger.debug(
+                f"Батч {batch_version}: обработано {posts_processed}, добавлено {posts_added}, фильтровано {posts_filtered}"
+            )
 
-            except Exception as e:
-                self.logger.error(
-                    f"Ошибка запроса (попытка {attempt + 1}/{max_retries}): {e}"
+            # Если в этом батче было слишком многие старые посты, останавливаемся совсем
+            if found_older_than_start:
+                break
+
+            if not batch_data.get("hasNext", False):
+                self.logger.debug(f"Конец данных для {ticker} (hasNext=False)")
+                break
+
+            # Условная остановка по батчам без результатов (тверже)
+            if (
+                not seen_in_range and batches_loaded > 10
+            ):  # Увеличил с 5 до 10, чтобы не срабатывало преждевременно
+                self.logger.warning(
+                    f"Не найдено постов в диапазоне в последних {batches_loaded-5}-{batches_loaded} батчах для {ticker}, возможно данные исчерпаны или период слишком узкий"
                 )
+                break
 
-                if attempt == max_retries - 1:
-                    return None
+            cursor = final_cursor
+            batches_loaded += 1
 
-        return None
+            # Ограничение на количество батчей - повысь для больших наборов данных
+            self.max_batches_per_ticker = (
+                999  # Увеличил для тестов с историей (ранее 100)
+            )
+            if batches_loaded >= self.max_batches_per_ticker:
+                self.logger.warning(
+                    f"Превышен лимит батчей ({self.max_batches_per_ticker}) для {ticker}, остановка"
+                )
+                break
 
-    def _extract_post_data(self, post: Dict[str, Any], ticker: str) -> Dict[str, Any]:
-        """Извлечение данных из поста"""
-        content = post.get("content", {})
-        owner = post.get("owner", {})
-        reactions = post.get("reactions", {})
+            if self.config.request_delay > 0:
+                await asyncio.sleep(self.config.request_delay)
 
-        # Конвертируем время
-        date, time_val = self._convert_time_to_msk(post.get("inserted", ""))
+        self.logger.info(
+            f"Исторический парсинг {ticker} завершен: {len(items)} постов, {batches_loaded} батчей, финальный курсор: {final_cursor}, остановка по старым постам: {found_older_than_start}"
+        )
 
-        # Извлекаем тикеры
-        mentioned_tickers = self._extract_mentioned_tickers(content)
+        return items, final_cursor
 
-        # Статистика реакций
-        total_reactions, reaction_types = self._calculate_reactions_stats(reactions)
-
-        # Формируем данные
-        return {
-            "date": date,
-            "time": time_val,
-            "username": owner.get("nickname", ""),
-            "post_text": content.get("text", ""),
-            "target_ticker": ticker,
-            "mentioned_tickers": mentioned_tickers,
-            "mentioned_tickers_count": len(mentioned_tickers),
-            "total_reactions": total_reactions,
-            "comments_count": post.get("commentsCount", 0),
-            "has_images": len(content.get("images", [])) > 0,
-            "images_count": len(content.get("images", [])),
-            "hashtags_count": len(content.get("hashtags", [])),
-            "reaction_like": reaction_types.get("like", 0),
-            "reaction_rocket": reaction_types.get("rocket", 0),
-            "reaction_dislike": reaction_types.get("dislike", 0),
-            "reaction_buy_up": reaction_types.get("buy-up", 0),
-            "reaction_get_rid": reaction_types.get("get-rid", 0),
-            "original_data": post,  # Сохраняем оригинальные данные
-        }
-
-    def _convert_time_to_msk(self, utc_time_str: str) -> tuple:
-        """Конвертация времени UTC в московское время"""
+    async def _make_async_request(
+        self, ticker: str, cursor: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Асинхронный запрос к tpulse через event loop executor"""
+        loop = asyncio.get_event_loop()
         try:
-            utc_time = datetime.fromisoformat(utc_time_str.replace("Z", "+00:00"))
-            msk_time = utc_time + timedelta(hours=3)
-            date = msk_time.date()
-            time_val = msk_time.time().replace(microsecond=0)
-            return date, time_val
+            return await loop.run_in_executor(None, self._sync_request, ticker, cursor)
         except Exception as e:
-            self.logger.warning(f"Ошибка конвертации времени: {e}")
-            return None, None
+            self.logger.error(f"Ошибка запроса для {ticker}: {e}")
+            return None
 
-    def _extract_mentioned_tickers(self, content: Dict) -> List[str]:
-        """Извлечение упомянутых тикеров"""
-        tickers = []
-        if "instruments" in content:
-            for instrument in content["instruments"]:
-                if "ticker" in instrument:
-                    tickers.append(instrument["ticker"])
-        return tickers
-
-    def _calculate_reactions_stats(self, reactions: Dict) -> tuple:
-        """Подсчет статистики реакций"""
-        total_reactions = reactions.get("totalCount", 0)
-
-        reaction_types = {}
-        if "counters" in reactions:
-            for counter in reactions["counters"]:
-                reaction_type = counter.get("type", "unknown")
-                count = counter.get("count", 0)
-                reaction_types[reaction_type] = count
-
-        return total_reactions, reaction_types
-
-    def _row_to_parsed_item(self, row: pd.Series, ticker: str) -> Optional[ParsedItem]:
-        """Конвертация строки DataFrame в ParsedItem"""
+    def _sync_request(
+        self, ticker: str, cursor: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Синхронный запрос (обертка для tpulse)"""
         try:
-            # Базовые данные
-            post_text = safe_str(row.get("post_text", ""))
-            username = safe_str(row.get("username", ""))
+            return self.tp.get_posts_by_ticker(ticker, cursor=cursor)
+        except Exception as e:
+            raise
 
-            if not post_text.strip():
+    def _process_batch(
+        self, posts: List[Dict[str, Any]], ticker: str, filters: Dict[str, Any]
+    ) -> List[ParsedItem]:
+        """Обработка батча постов с фильтрами"""
+        items = []
+        for post in posts:
+            parsed_item = self._post_to_parsed_item(post, ticker)
+            if parsed_item and self._apply_filters(parsed_item, filters):
+                items.append(parsed_item)
+        return items
+
+    def _post_to_parsed_item(
+        self, post: Dict[str, Any], ticker: str
+    ) -> Optional[ParsedItem]:
+        """Конвертация поста в ParsedItem"""
+        try:
+            # Извлекаем данные из поста
+            post_data = self._extract_post_data(post)
+
+            # Проверяем обязательные поля
+            if not post_data["text"].strip():
                 return None
 
-            # Дата и время
-            date_val = row.get("date")
-            time_val = row.get("time")
-
-            published_at = None
-            if date_val is not None and time_val is not None:
-                try:
-                    if hasattr(date_val, "strftime"):
-                        date_str = date_val.strftime("%Y-%m-%d")
-                    else:
-                        date_str = str(date_val)
-
-                    if hasattr(time_val, "strftime"):
-                        time_str = time_val.strftime("%H:%M:%S")
-                    elif time_val is not None:
-                        time_str = str(time_val)
-                    else:
-                        time_str = "00:00:00"
-
-                    published_at = datetime.strptime(
-                        f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S"
-                    )
-                except Exception:
-                    published_at = safe_datetime(row.get("datetime"))
-
-            # Генерация ID и URL
-            original_id = self._generate_post_id(row, ticker)
-            url = self._generate_post_url(row, ticker)
-
-            # Упомянутые тикеры
-            mentioned_tickers = safe_list(row.get("mentioned_tickers", []))
+            published_at = self._extract_post_date(post)
+            original_id = self._generate_post_id(post)
+            url = self._generate_post_url(post)
+            title = self._generate_title(post_data["text"], post_data["author"])
 
             # Метаданные
             metadata = {
                 "target_ticker": ticker,
-                "mentioned_tickers": mentioned_tickers,
-                "mentioned_tickers_count": len(mentioned_tickers),
-                "total_reactions": safe_int(row.get("total_reactions", 0)),
-                "comments_count": safe_int(row.get("comments_count", 0)),
-                "has_images": bool(row.get("has_images", False)),
-                "images_count": safe_int(row.get("images_count", 0)),
-                "hashtags_count": safe_int(row.get("hashtags_count", 0)),
-                "reactions": {
-                    "like": safe_int(row.get("reaction_like", 0)),
-                    "rocket": safe_int(row.get("reaction_rocket", 0)),
-                    "dislike": safe_int(row.get("reaction_dislike", 0)),
-                    "buy_up": safe_int(row.get("reaction_buy_up", 0)),
-                    "get_rid": safe_int(row.get("reaction_get_rid", 0)),
-                },
+                "mentioned_tickers": post_data["instruments"],
+                "mentioned_tickers_count": len(post_data["instruments"]),
+                "total_reactions": post_data["reactions"]["totalCount"],
+                "comments_count": post_data["commentsCount"],
+                "has_images": len(post_data["images"]) > 0,
+                "images_count": len(post_data["images"]),
+                "hashtags_count": len(post_data["hashtags"]),
+                "profiles_count": len(post_data["profiles"]),
+                "strategies_count": len(post_data["strategies"]),
+                "reactions": post_data["reactions"]["counters"],
+                "instruments": post_data["instruments"],  # Полные данные инструментов
+                "hashtags": post_data["hashtags"],
+                "profiles": post_data["profiles"],
+                "strategies": post_data["strategies"],
+                "owner": post_data["owner"],
+                "service_tags": post_data["service_tags"],
+                "is_editable": post_data["is_editable"],
+                "base_tariff_category": post_data["base_tariff_category"],
+                "cursor": post.get("cursor"),  # Если есть в данных
             }
 
             # Создаем ParsedItem
@@ -439,78 +413,155 @@ class TInvestParser(BaseParser):
                 source_name=self.source_name,
                 original_id=original_id,
                 url=url,
-                title=self._generate_title(post_text),
-                content=post_text,
+                title=title,
+                content=post_data["text"],
                 published_at=published_at,
-                author=username if username else None,
+                author=post_data["author"],
                 metadata=metadata,
-                raw_data=row.to_dict() if hasattr(row, "to_dict") else dict(row),
+                raw_data={"original_post": post},  # Полный сырой пост
             )
 
         except Exception as e:
-            self.logger.error(f"Ошибка создания ParsedItem: {e}")
+            self.logger.error(f"Ошибка конвертации поста: {e}")
             return None
 
-    def _generate_post_id(self, row: pd.Series, ticker: str) -> str:
-        """Генерация уникального ID поста"""
-        import hashlib
-        import json
+    def _extract_post_data(self, post: Dict[str, Any]) -> Dict[str, Any]:
+        """Извлечение всех данных из поста"""
+        content = post.get("content", {})
 
-        content_for_hash = json.dumps(
-            {
-                "username": safe_str(row.get("username", "")),
-                "post_text": safe_str(row.get("post_text", "")),
-                "date": str(row.get("date", "")),
-                "time": str(row.get("time", "")),
-                "ticker": ticker,
+        return {
+            "id": post.get("id", ""),
+            "text": content.get("text", ""),
+            "author": self._extract_author(post.get("owner", {})),
+            "owner": post.get("owner", {}),
+            "instruments": content.get(
+                "instruments", []
+            ),  # Полный список с ценами/именами
+            "images": content.get("images", []),
+            "hashtags": content.get("hashtags", []),
+            "profiles": content.get("profiles", []),
+            "strategies": content.get("strategies", []),
+            "reactions": {
+                "totalCount": safe_int(post.get("reactions", {}).get("totalCount", 0)),
+                "counters": post.get("reactions", {}).get("counters", []),
             },
-            sort_keys=True,
-            ensure_ascii=False,
-        )
+            "commentsCount": safe_int(post.get("commentsCount", 0)),
+            "service_tags": post.get("serviceTags", []),
+            "is_editable": post.get("isEditable", False),
+            "base_tariff_category": post.get("baseTariffCategory", ""),
+            "is_bookmarked": post.get("isBookmarked", False),
+            "status": post.get("status", ""),
+        }
 
-        post_hash = hashlib.sha256(content_for_hash.encode()).hexdigest()[:16]
-        return f"tinvest_{post_hash}"
+    def _extract_author(self, owner: Dict[str, Any]) -> str:
+        """Извлечение автора"""
+        return safe_str(owner.get("nickname", ""))
 
-    def _generate_post_url(self, row: pd.Series, ticker: str) -> str:
-        """Генерация URL поста"""
-        username = safe_str(row.get("username", ""))
-        date_val = row.get("date")
+    def _extract_post_date(self, post: Dict[str, Any]) -> Optional[datetime]:
+        """Извлечение и конвертация даты в naive datetime (MSK)"""
+        try:
+            utc_str = post.get("inserted", "")
+            if not utc_str:
+                return None
+            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))  # aware UTC
+            msk_dt = utc_dt  # + timedelta(hours=3)  # aware MSK
+            return msk_dt.replace(
+                tzinfo=None
+            )  # делаем naive для совместимости с start/end из use_case
+        except Exception:
+            return None
 
-        if hasattr(date_val, "strftime"):
-            date_str = date_val.strftime("%Y%m%d")
-        else:
-            date_str = str(date_val).replace("-", "")
+    def _generate_post_id(self, post: Dict[str, Any]) -> str:
+        """Генерация уникального ID поста"""
+        post_id = post.get("id", "")
+        inserted = post.get("inserted", "")
+        content = post.get("content", {}).get("text", "")[:100]
+        key_data = f"{post_id}|{inserted}|{content}"
+        hash_obj = hashlib.sha256(key_data.encode()).hexdigest()
+        return f"tinvest_{hash_obj[:16]}"
 
-        username_clean = "".join(
-            c for c in username if c.isalnum() or c in "-_"
-        ).lower()
+    def _generate_post_url(self, post: Dict[str, Any]) -> str:
+        """Генерация реального URL поста"""
+        owner = post.get("owner", {})
+        nickname = owner.get("nickname", "")
+        post_id = post.get("id", "")
+        if nickname and post_id:
+            return f"https://www.tbank.ru/invest/social/profile/{nickname}/{post_id}"
+        return ""  # Пустой URL если данных недостаточно
 
-        return f"tinvest://{date_str}/{username_clean}/{ticker}"
-
-    def _generate_title(self, text: str) -> str:
+    def _generate_title(self, text: str, author: str) -> str:
         """Генерация заголовка из текста"""
         if not text:
             return "Без заголовка"
 
-        lines = text.strip().split("\n")
-        for line in lines:
-            if line.strip() and len(line.strip()) > 5:
-                title = line.strip()[:150]
-                return title + "..." if len(line.strip()) > 150 else title
+        # Первая строка или первое предложение
+        first_line = text.strip().split("\n")[0]
+        first_sentence = text.split(".")[0]
+        candidate = (
+            first_line if len(first_line) > len(first_sentence) else first_sentence
+        )
 
-        return text[:100] + "..." if len(text) > 100 else text
+        if len(candidate) < 20:
+            candidate = text[:100]
+
+        title = candidate.strip()
+        if author:
+            title = f"{author}: {title}"
+
+        return title[:200] + ("..." if len(title) > 200 else "")
+
+    def _apply_filters(self, item: ParsedItem, filters: Dict[str, Any]) -> bool:
+        """Применение фильтров к элементу"""
+        if "min_reactions" in filters:
+            if item.metadata.get("total_reactions", 0) < filters["min_reactions"]:
+                return False
+        if "has_images" in filters and filters["has_images"]:
+            if not item.metadata.get("has_images", False):
+                return False
+        if "author" in filters:
+            if item.author != filters["author"]:
+                return False
+        return True
 
     def validate_item(self, item: ParsedItem) -> bool:
         """
-        Переопределенная валидация для постов Тинькофф Пульса.
-        Требования менее строгие чем для новостных статей.
+        Расширенная валидация для постов Тинькофф Пульса.
+        Минимальные требования для социального контента.
         """
-        if not item.url:
-            self.logger.warning("Пост без URL")
+        # Базовые проверки
+        if not item.url or not self.validate_url(item.url):
+            self.logger.warning(f"Некорректный URL: {item.url}")
             return False
 
         if not item.content or len(item.content.strip()) < 10:
             self.logger.warning("Слишком короткий пост")
             return False
 
+        # Специфично для TP: должен быть автор
+        if not item.author or len(item.author.strip()) == 0:
+            self.logger.warning("Пост без автора")
+            return False
+
+        # Хотя бы один упомянутый тикер
+        mentioned_tickers = item.metadata.get("mentioned_tickers", [])
+        if not mentioned_tickers:
+            self.logger.warning("Пост без упомянутых тикеров")
+            return False
+
+        # Дополнительные проверки
+        if len(item.content.strip()) > 10000:  # Абсурдно длинный пост
+            self.logger.warning(f"Слишком длинный пост: {len(item.content)} символов")
+            return False
+
         return True
+
+    def validate_url(self, url: str) -> bool:
+        """Простая валидация URL"""
+        from urllib.parse import urlparse
+
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except Exception:
+            return False
+

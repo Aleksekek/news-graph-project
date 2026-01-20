@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Union
@@ -159,9 +160,7 @@ class ArticleRepository:
                 yield conn
 
     @async_retry(
-        exceptions=(
-            asyncpg.exceptions.PostgresError,
-        ),  # Исключаем InterfaceError из retry
+        exceptions=(asyncpg.exceptions.PostgresError,),
         max_attempts=3,
         delay=2.0,
     )
@@ -173,12 +172,22 @@ class ArticleRepository:
             return ProcessingStats()
 
         stats = ProcessingStats(total_rows=len(articles))
-        existing_urls = set()
 
+        url_to_article = OrderedDict()
+        for article in articles:
+            url_to_article[article.url] = article
+
+        deduped_articles = list(url_to_article.values())
+        stats.skipped = len(articles) - len(deduped_articles)
+        articles = deduped_articles
+
+        existing_urls = set()
         try:
             async with self._transaction() as conn:
-                # Batch проверка дубликатов
+
+                # Batch проверка дубликатов (теперь articles без внутренних дубликатов)
                 source_ids = list(set(a.source_id for a in articles))
+
                 for sid in source_ids:
                     rows = await conn.fetch(
                         "SELECT url FROM raw_articles WHERE source_id = $1", sid
@@ -187,6 +196,7 @@ class ArticleRepository:
 
                 unique_articles = [a for a in articles if a.url not in existing_urls]
                 stats.skipped += len(articles) - len(unique_articles)
+
                 if not unique_articles:
                     return stats
 
@@ -203,10 +213,11 @@ class ArticleRepository:
                 if batch_data:
                     sql = """
                     INSERT INTO raw_articles (
-                        source_id, original_id, url, raw_title, raw_text, 
-                        raw_html, media_content, published_at, author, language, headers, meta_info, status
+                    source_id, original_id, url, raw_title, raw_text, 
+                    raw_html, media_content, published_at, author, language, headers, meta_info, status
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     """
+
                     await conn.executemany(sql, batch_data)
                     stats.saved += len(batch_data)
                     self.logger.info(
@@ -220,7 +231,6 @@ class ArticleRepository:
                     f"Connection closed, re-init done: {e}"
                 )  # Не retry
             raise
-
         return stats
 
     async def _prepare_article_params(self, article: ArticleForDB) -> List[Any]:

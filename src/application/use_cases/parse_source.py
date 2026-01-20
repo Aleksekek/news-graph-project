@@ -74,7 +74,6 @@ class ParseSourceUseCase:
 
             # 3. Создаем процессор и репозиторий
             processor = ProcessorFactory.create(source_name)
-            # repository = ArticleRepository()
 
             # 4. Выполняем парсинг
             async with parser:
@@ -115,9 +114,6 @@ class ParseSourceUseCase:
             # 6. Сохраняем в БД (асинхронно)
             repository = ArticleRepository()
             stats = await repository.save_articles_batch(articles_db)
-
-            # 7. НЕ вызываем cleanup() - пул должен оставаться открытым
-            # repository.cleanup() удаляем!
 
             self.logger.info(
                 f"Сохранено: {stats.saved}, пропущено: {stats.skipped}, "

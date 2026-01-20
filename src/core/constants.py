@@ -34,8 +34,8 @@ LENTA_CATEGORIES = [
     "Интернет и СМИ",
 ]
 
-# Популярные тикеры для простого NLP
-COMMON_TICKERS = [
+# Тикеры ТПульса
+TINVEST_TICKERS = [
     "SBER",
     "VTBR",
     "GAZP",
@@ -45,15 +45,10 @@ COMMON_TICKERS = [
     "TATN",
     "ROSN",
     "ALRS",
-    "POLY",
     "MOEX",
-    "YNDX",
+    "YDEX",
     "OZON",
-    "TCSG",
-    "VKCO",
     "AFKS",
     "PHOR",
     "MGNT",
-    "DSKY",
-    "QIWI",
 ]

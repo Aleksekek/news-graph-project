@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, "src")
 
 from src.application.use_cases.parse_source import ParseSourceUseCase
-from src.core.constants import LENTA_CATEGORIES
+from src.core.constants import LENTA_CATEGORIES, TINVEST_TICKERS
 from src.domain.storage.database import ArticleRepository, DatabasePoolManager
 from src.utils.logging import setup_logging
 
@@ -64,7 +64,6 @@ async def test_archive_parsing(
         end_date = today - timedelta(days=days_back_end)
 
         print(f"   Период: {start_date.date()} - {end_date.date()}")
-        input()
 
         stats = await use_case.execute(
             source_name=source_name,
@@ -95,21 +94,32 @@ async def main():
         stats_before = await get_db_stats_before()
 
         tests = [
-            # Последние посты
-            # ("Последние 5 постов Lenta (все категории)",
-            # lambda: test_recent_posts("lenta", 5, categories=["Политика", "Экономика"])),
-            #
-            # ("Последние 5 постов TInvest (акции)",
-            # lambda: test_recent_posts("tinvest", 5, tickers=["SBER", "VTBR", "GAZP"])),
             # Архивный парсинг (неделя назад)
             (
-                "Архив Lenta с 7-го по 2-й день назад",
+                "Архив Lenta с 2-го по 1-й день назад",
                 lambda: test_archive_parsing(
-                    "lenta", 5, 1, 1000000, categories=LENTA_CATEGORIES
+                    "lenta", 2, 1, 1000000, categories=LENTA_CATEGORIES
                 ),
             ),
-            # ("Архив TInvest с 5-го по 1-й день назад",
-            # lambda: test_archive_parsing("tinvest", 5, 1, 10, tickers=["SBER"])),
+            (
+                "Архив TInvest с 2-го по 1-й день назад",
+                lambda: test_archive_parsing(
+                    "tinvest", 2, 1, 1000000, tickers=TINVEST_TICKERS
+                ),
+            ),
+            # Последние посты
+            (
+                "Последние 50 постов Lenta (все категории)",
+                lambda: test_recent_posts(
+                    "lenta", 50, categories=LENTA_CATEGORIES
+                ),
+            ),
+            (
+                "Последние 50 постов TInvest (акции)",
+                lambda: test_recent_posts(
+                    "tinvest", 50, tickers=TINVEST_TICKERS
+                ),
+            ),
         ]
 
         results = []
