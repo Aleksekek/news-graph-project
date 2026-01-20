@@ -1,0 +1,11 @@
+lenta_hourly:
+  enabled: true
+  cron: "15,45 * * * *"
+  kwargs:
+    limit: 30
+tinvest_hourly:
+  enabled: true
+  cron: "0,30 * * * *"
+  kwargs:
+    tickers: "SBER,VTBR"
+    num_posts: 50
