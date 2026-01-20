@@ -2,10 +2,11 @@ lenta_hourly:
   enabled: true
   cron: "15,45 * * * *"
   kwargs:
-    limit: 30
+    categories: "Россия,Бывший СССР,Политика,Экономика,Мир,Наука и техника,Интернет и СМИ"
+    limit: 50
 tinvest_hourly:
   enabled: true
   cron: "0,30 * * * *"
   kwargs:
-    tickers: "SBER,VTBR"
-    num_posts: 50
+    tickers: "SBER,VTBR,GAZP,LKOH,GMKN,NVTK,TATN,ROSN,ALRS,MOEX,YDEX,OZON,AFKS,PHOR,MGNT"
+    limit: 50
