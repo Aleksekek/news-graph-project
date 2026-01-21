@@ -464,7 +464,7 @@ class TInvestParser(BaseParser):
             if not utc_str:
                 return None
             utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))  # aware UTC
-            msk_dt = utc_dt  # + timedelta(hours=3)  # aware MSK
+            msk_dt = utc_dt + timedelta(hours=3)  # aware MSK
             return msk_dt.replace(
                 tzinfo=None
             )  # делаем naive для совместимости с start/end из use_case
