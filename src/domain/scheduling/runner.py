@@ -17,9 +17,19 @@ async def run_parser_task(source: str, **kwargs):
 
     use_case = ParseSourceUseCase()
 
-    try:
-        # Преобразуем tickers в список, если это строка (для тинвеста)
+    try:  # Преобразуем tickers в список, если это строка (для тинвеста)
         if (
+            source == "lenta"
+            and "categories" in kwargs
+            and isinstance(kwargs["categories"], str)
+        ):
+            # Разбираем строку в список
+            categories_str = kwargs["categories"]
+            kwargs["categories"] = [
+                t.strip() for t in categories_str.split(",") if t.strip()
+            ]
+            logger.info(f"Parsed categories list: {kwargs['categories']}")
+        elif (
             source == "tinvest"
             and "tickers" in kwargs
             and isinstance(kwargs["tickers"], str)

@@ -78,7 +78,7 @@ class TInvestParser(BaseParser):
                     filters=kwargs,  # Дать шанс набрать больше kandидатов
                 )
 
-                self.logger.info(
+                self.logger.debug(
                     f"Для тикера {ticker} получено {len(ticker_items)} кандидат-постов"
                 )
 
@@ -564,4 +564,3 @@ class TInvestParser(BaseParser):
             return all([result.scheme, result.netloc])
         except Exception:
             return False
-
