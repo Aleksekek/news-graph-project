@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:  # позволяет запускать вручную из интерфейса GitHub
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -11,15 +11,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          path: /tmp/workspace  # Временная директория для свежего кода
 
       - name: Sync code to project directory
-        run: |
-          # Синхронизируем код из временной папки в реальный проект
-          # --delete удаляет файлы, которых больше нет в репозитории
+        run: |         
+          # Синхронизируем в реальную папку проекта
           rsync -av --delete --exclude='.git' \
-            /tmp/workspace/ \
+            ${{ github.workspace }}/ \
             /home/newsapp/news_graph/
 
       - name: Create .env file
@@ -51,17 +48,14 @@ jobs:
           TIMEZONE=${{ vars.TIMEZONE }}
           EOF
           
-          echo "✅ .env file created"
+          echo "✅ .env file created at /home/newsapp/news_graph"
 
       - name: Deploy with Docker Compose
         run: |
           cd /home/newsapp/news_graph
           
-          # Собираем и перезапускаем контейнеры
           docker-compose down
           docker-compose up -d --build
-          
-          # Чистим старые образы
           docker image prune -f
           
           echo "✅ Deployment completed"
