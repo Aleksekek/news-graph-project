@@ -12,7 +12,7 @@ news_graph_project/
 ├── test_db_connections.py         # Тесты подключения к БД
 ├── test_full_integration.py       # Полные интеграционные тесты
 │
-├── .github/                       # Github Acrions
+├── .github/                       # Github Actions
 │   ├── workflows/                 # Список воркфлоу
 │   │   └── deploy.yml             # Основной воркфлоу сборки и деплоя
 │
