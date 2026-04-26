@@ -1,0 +1,72 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:  # позволяет запускать вручную из интерфейса GitHub
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: /tmp/workspace  # Временная директория для свежего кода
+
+      - name: Sync code to project directory
+        run: |
+          # Синхронизируем код из временной папки в реальный проект
+          # --delete удаляет файлы, которых больше нет в репозитории
+          rsync -av --delete --exclude='.git' \
+            /tmp/workspace/ \
+            /home/newsapp/news_graph/
+
+      - name: Create .env file
+        run: |
+          cd /home/newsapp/news_graph
+          
+          cat > .env << 'EOF'
+          # База данных
+          DB_HOST=${{ vars.DB_HOST }}
+          DB_PORT=${{ vars.DB_PORT }}
+          DB_NAME=${{ vars.DB_NAME }}
+          DB_USER=${{ vars.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+
+          # Парсеры
+          PARSER_REQUEST_DELAY=${{ vars.PARSER_REQUEST_DELAY }}
+          PARSER_MAX_RETRIES=${{ vars.PARSER_MAX_RETRIES }}
+          PARSER_TIMEOUT=${{ vars.PARSER_TIMEOUT }}
+
+          # Логирование
+          LOG_LEVEL=${{ vars.LOG_LEVEL }}
+          LOG_DIR=${{ vars.LOG_DIR }}
+
+          # Телеграм
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_CHAT_ID=${{ secrets.ADMIN_CHAT_ID }}
+
+          # Время
+          TIMEZONE=${{ vars.TIMEZONE }}
+          EOF
+          
+          echo "✅ .env file created"
+
+      - name: Deploy with Docker Compose
+        run: |
+          cd /home/newsapp/news_graph
+          
+          # Собираем и перезапускаем контейнеры
+          docker-compose down
+          docker-compose up -d --build
+          
+          # Чистим старые образы
+          docker image prune -f
+          
+          echo "✅ Deployment completed"
+
+      - name: Check container status
+        run: |
+          cd /home/newsapp/news_graph
+          docker-compose ps
