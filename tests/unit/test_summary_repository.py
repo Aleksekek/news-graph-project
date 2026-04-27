@@ -2,6 +2,7 @@
 Тесты для SummaryRepository.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,16 +17,14 @@ class TestSummaryRepository:
         """Получение суммаризаций за период - пустой результат."""
         from src.database.repositories.summary_repository import SummaryRepository
 
-        # Правильный мок для async context manager
+        # Создаём мок для asyncpg соединения
         mock_conn = AsyncMock()
         mock_conn.fetch = AsyncMock(return_value=[])
 
-        mock_cm = MagicMock()
-        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_cm.__aexit__ = AsyncMock()
-
+        # Создаём асинхронный контекстный менеджер
+        @asynccontextmanager
         async def mock_connection():
-            return mock_cm
+            yield mock_conn
 
         with patch("src.database.repositories.summary_repository.DatabasePoolManager") as MockPool:
             MockPool.connection = mock_connection
@@ -41,16 +40,12 @@ class TestSummaryRepository:
         """Умная выборка - пустой результат."""
         from src.database.repositories.summary_repository import SummaryRepository
 
-        # Мокаем запрос источников - возвращаем пустой список
         mock_conn = AsyncMock()
         mock_conn.fetch = AsyncMock(return_value=[])  # Нет источников
 
-        mock_cm = MagicMock()
-        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
-        mock_cm.__aexit__ = AsyncMock()
-
+        @asynccontextmanager
         async def mock_connection():
-            return mock_cm
+            yield mock_conn
 
         with patch("src.database.repositories.summary_repository.DatabasePoolManager") as MockPool:
             MockPool.connection = mock_connection

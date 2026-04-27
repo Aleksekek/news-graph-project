@@ -5,9 +5,11 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
+
+from src.core.constants import LENTA_CATEGORIES, TINVEST_TICKERS
 
 
 @dataclass
@@ -17,7 +19,7 @@ class TaskConfig:
     name: str
     cron: str
     enabled: bool = True
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class ScheduleConfig:
@@ -32,7 +34,7 @@ class ScheduleConfig:
         self.config_path = config_path
         self.tasks = self._load_config()
 
-    def _load_config(self) -> Dict[str, TaskConfig]:
+    def _load_config(self) -> dict[str, TaskConfig]:
         """Загрузка конфигурации с дефолтами."""
 
         # Дефолтные задачи
@@ -68,13 +70,10 @@ class ScheduleConfig:
 
         return default_tasks
 
-    def get_enabled_tasks(self) -> List[TaskConfig]:
+    def get_enabled_tasks(self) -> list[TaskConfig]:
         """Получение только включённых задач."""
         return [task for task in self.tasks.values() if task.enabled]
 
-
-# Для избежания циклических импортов
-from src.core.constants import LENTA_CATEGORIES, TINVEST_TICKERS
 
 # Глобальный экземпляр
 schedule_config = ScheduleConfig()

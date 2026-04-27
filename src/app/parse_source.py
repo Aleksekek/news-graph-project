@@ -6,7 +6,6 @@ Use case для парсинга источника.
 from datetime import datetime
 from typing import Optional
 
-from src.core.exceptions import ParserError
 from src.core.models import ProcessingStats
 from src.database.repositories.article_repository import ArticleRepository
 from src.parsers.converter_factory import ConverterFactory

@@ -462,6 +462,23 @@ class NewsTelegramBot:
         await self._do_search(update.message, keyword)
         return ConversationHandler.END
     
+    async def news_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда /news - поиск новостей."""
+        if not context.args:
+            await update.message.reply_text(
+                "❌ Укажите поисковый запрос.\nПример: `/news криптовалюта`",
+                parse_mode="Markdown"
+            )
+            return
+        
+        query = " ".join(context.args)
+        await update.message.reply_text(
+            f"🔍 Ищу новости по запросу: *{query}*...",
+            parse_mode="Markdown"
+        )
+        
+        await self._do_search(update.message, query)
+    
     async def _do_search(self, message, query: str):
         """Выполнение поиска."""
         try:

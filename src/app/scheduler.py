@@ -34,17 +34,11 @@ async def run_parse_task(source: str, **kwargs):
 
     try:
         # Преобразуем строковые параметры в списки если нужно
-        if source == "lenta" and "categories" in kwargs:
-            if isinstance(kwargs["categories"], str):
-                kwargs["categories"] = [
-                    c.strip() for c in kwargs["categories"].split(",") if c.strip()
-                ]
+        if source == "lenta" and isinstance(kwargs.get("categories"), str):
+            kwargs["categories"] = [c.strip() for c in kwargs["categories"].split(",") if c.strip()]
 
-        if source == "tinvest" and "tickers" in kwargs:
-            if isinstance(kwargs["tickers"], str):
-                kwargs["tickers"] = [
-                    t.strip() for t in kwargs["tickers"].split(",") if t.strip()
-                ]
+        if source == "tinvest" and isinstance(kwargs.get("tickers"), str):
+            kwargs["tickers"] = [t.strip() for t in kwargs["tickers"].split(",") if t.strip()]
 
         # Выполняем парсинг
         stats = await use_case.execute(source_name=source, **kwargs)
@@ -89,10 +83,7 @@ def setup_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
-        logger.info(
-            f"📅 Задача '{task.name}' добавлена: "
-            f"cron='{task.cron}', source={source}"
-        )
+        logger.info(f"📅 Задача '{task.name}' добавлена: " f"cron='{task.cron}', source={source}")
 
     return scheduler
 
