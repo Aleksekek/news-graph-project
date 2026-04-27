@@ -78,7 +78,8 @@ news_graph_project/
 │   └── utils/                     # Вспомогательные утилиты
 │       ├── logging.py             # Конфиг логирования
 │       ├── data.py                # Общие data utils
-│       └── retry.py               # Логика повторных попыток
+│       ├── retry.py               # Логика повторных попыток
+│       └── telegram_helpers.py    # Вспомогательные функции для обработки markdown
 │
 └── scripts/                       # Скрипты запуска
     ├── run_parser.py              # Универсальный скрипт запуска
