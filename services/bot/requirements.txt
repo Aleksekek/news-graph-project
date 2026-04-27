@@ -1,6 +1,6 @@
 asyncpg==0.31.0
 dotenv==0.9.9
-openai==2.32.0
 python-telegram-bot==22.7
 pydantic==2.13.3
 pydantic-settings==2.14.0
+socksio==1.0.0
