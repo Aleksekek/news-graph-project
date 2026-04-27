@@ -148,7 +148,6 @@ class NewsTelegramBot:
     async def summary_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Генерация сводки за период"""
         try:
-            # Парсим аргументы
             days = 1
             if context.args and len(context.args) > 0:
                 try:
@@ -162,25 +161,34 @@ class NewsTelegramBot:
                 f"📊 Генерирую сводку за {days} день(дней)..."
             )
 
-            # Генерируем сводку
             summary = await self.summary_generator.generate_daily_summary(days=days)
 
             if summary:
-                # Разбиваем на части если слишком длинное
+                # Используем HTML вместо Markdown — он более надёжный
                 if len(summary) > 4000:
                     parts = [
                         summary[i : i + 4000] for i in range(0, len(summary), 4000)
                     ]
                     for i, part in enumerate(parts, 1):
+                        # Убираем parse_mode для длинных сообщений
                         await update.message.reply_text(
-                            f"📰 Часть {i}/{len(parts)}:\n\n{part}",
-                            parse_mode="Markdown",
+                            f"📰 Часть {i}/{len(parts)}:\n\n{part}"
                         )
                 else:
-                    await update.message.reply_text(
-                        f"📰 *Сводка за {days} день(дней):*\n\n{summary}",
-                        parse_mode="Markdown",
-                    )
+                    # Пробуем с parse_mode, но если ошибка — отправляем без
+                    try:
+                        await update.message.reply_text(
+                            f"📰 *Сводка за {days} день(дней):*\n\n{summary}",
+                            parse_mode="Markdown",
+                        )
+                    except Exception as e:
+                        if "Can't parse entities" in str(e):
+                            # Отправляем без разметки
+                            await update.message.reply_text(
+                                f"📰 Сводка за {days} день(дней):\n\n{summary}"
+                            )
+                        else:
+                            raise
             else:
                 await update.message.reply_text(
                     "❌ Не удалось сгенерировать сводку. Попробуйте позже."
