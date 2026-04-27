@@ -5,7 +5,7 @@
 
 import asyncio
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from tpulse import TinkoffPulse
@@ -113,9 +113,7 @@ class TInvestParser(BaseParser):
         if not tickers:
             raise ParserError("TInvest парсеру нужен список tickers")
 
-        self.logger.info(
-            f"Архивный парсинг TInvest: {start_date.date()} - {end_date.date()}"
-        )
+        self.logger.info(f"Архивный парсинг TInvest: {start_date.date()} - {end_date.date()}")
 
         all_items = []
         final_cursor = start_cursor
@@ -157,9 +155,7 @@ class TInvestParser(BaseParser):
 
         # Извлекаем метаданные
         instruments = content.get("instruments", [])
-        mentioned_tickers = [
-            i.get("ticker", "") for i in instruments if i.get("ticker")
-        ]
+        mentioned_tickers = [i.get("ticker", "") for i in instruments if i.get("ticker")]
 
         reactions = post.get("reactions", {})
         total_reactions = reactions.get("totalCount", 0)
@@ -305,8 +301,7 @@ class TInvestParser(BaseParser):
             await self._delay()
 
         self.logger.info(
-            f"Тикер {ticker}: {len(items)} постов за период, "
-            f"батчей: {batches_loaded}"
+            f"Тикер {ticker}: {len(items)} постов за период, " f"батчей: {batches_loaded}"
         )
 
         return items, final_cursor
@@ -319,9 +314,7 @@ class TInvestParser(BaseParser):
 
         try:
             # tpulse синхронный, запускаем в executor
-            return await loop.run_in_executor(
-                None, self._tp.get_posts_by_ticker, ticker, cursor
-            )
+            return await loop.run_in_executor(None, self._tp.get_posts_by_ticker, ticker, cursor)
         except Exception as e:
             self.logger.error(f"Ошибка запроса для {ticker}: {e}")
             return None
@@ -339,7 +332,7 @@ class TInvestParser(BaseParser):
             if not inserted:
                 return None
 
-            # Формат: "2026-01-17T19:09:24Z" или "2026-01-17T19:09:24+00:00"
+            # Формат: "2026-04-27T19:39:56Z"
             inserted = inserted.replace("Z", "+00:00")
 
             # Парсим
@@ -347,10 +340,12 @@ class TInvestParser(BaseParser):
 
             # Конвертируем из UTC в MSK
             if dt.tzinfo:
+                from src.utils.datetime_utils import utc_to_msk
+
                 return utc_to_msk(dt)
             else:
-                # Если без tzinfo, считаем что UTC
-                return utc_to_msk(dt.replace(tzinfo=datetime.now().astimezone().tzinfo))
+                # Если без tzinfo, считаем что это UTC
+                return utc_to_msk(dt.replace(tzinfo=timezone.utc))
 
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга даты: {e}")
@@ -387,9 +382,7 @@ class TInvestParser(BaseParser):
         first_line = text.strip().split("\n")[0]
         first_sentence = text.split(".")[0]
 
-        candidate = (
-            first_line if len(first_line) > len(first_sentence) else first_sentence
-        )
+        candidate = first_line if len(first_line) > len(first_sentence) else first_sentence
 
         if len(candidate) < 20:
             candidate = text[:100]
