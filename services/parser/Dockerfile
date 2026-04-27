@@ -13,7 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем общий код
 COPY src /app/src
-COPY config /app/config
 
 # Копируем точку входа
 COPY services/parser/app.py .
