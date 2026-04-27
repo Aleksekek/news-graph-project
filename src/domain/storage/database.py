@@ -312,6 +312,32 @@ class ArticleRepository:
             return []
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_articles_by_days_with_links(
+        self, days: int, limit: int = 50
+    ) -> List[Dict]:
+        """Получить статьи за N дней с URL"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                cutoff_date = datetime.now() - timedelta(days=days)
+                rows = await conn.fetch(
+                    """
+                    SELECT raw_title, raw_text, published_at, author, source_id, url
+                    FROM raw_articles 
+                    WHERE published_at >= $1
+                    AND status != 'failed'
+                    AND LENGTH(raw_text) > 100
+                    ORDER BY published_at DESC
+                    LIMIT $2
+                    """,
+                    cutoff_date,
+                    limit,
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения статей за дни с ссылками: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_articles_count(self) -> int:
         """Получить общее количество статей"""
         try:
@@ -379,6 +405,30 @@ class ArticleRepository:
                     ORDER BY published_at DESC
                     LIMIT $2
                 """,
+                    f"%{query}%",
+                    limit,
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка поиска статей: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def search_articles_with_links(
+        self, query: str, limit: int = 10
+    ) -> List[Dict]:
+        """Поиск статей по ключевым словам с URL"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT raw_title, raw_text, published_at, author, source_id, url
+                    FROM raw_articles 
+                    WHERE (raw_title ILIKE $1 OR raw_text ILIKE $1)
+                    AND status != 'failed'
+                    ORDER BY published_at DESC
+                    LIMIT $2
+                    """,
                     f"%{query}%",
                     limit,
                 )

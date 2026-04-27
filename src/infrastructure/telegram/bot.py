@@ -19,6 +19,7 @@ from telegram.request import HTTPXRequest
 from src.config.settings import settings
 from src.domain.processing.summary_generator import SummaryGenerator
 from src.domain.storage.database import ArticleRepository
+from src.utils.telegram_helpers import safe_markdown_text, truncate_with_ellipsis
 
 # Настройка логирования
 logging.basicConfig(
@@ -146,7 +147,7 @@ class NewsTelegramBot:
             await update.message.reply_text("❌ Вы не были подписаны на рассылку.")
 
     async def summary_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Генерация сводки за период"""
+        """Генерация сводки с безопасным Markdown"""
         try:
             days = 1
             if context.args and len(context.args) > 0:
@@ -161,42 +162,46 @@ class NewsTelegramBot:
                 f"📊 Генерирую сводку за {days} день(дней)..."
             )
 
-            summary = await self.summary_generator.generate_daily_summary(days=days)
+            # Получаем статьи с ссылками
+            articles = await self.summary_generator.get_articles_with_links(days=days)
 
-            if summary:
-                # Используем HTML вместо Markdown — он более надёжный
-                if len(summary) > 4000:
-                    parts = [
-                        summary[i : i + 4000] for i in range(0, len(summary), 4000)
-                    ]
-                    for i, part in enumerate(parts, 1):
-                        # Убираем parse_mode для длинных сообщений
-                        await update.message.reply_text(
-                            f"📰 Часть {i}/{len(parts)}:\n\n{part}"
-                        )
-                else:
-                    # Пробуем с parse_mode, но если ошибка — отправляем без
-                    try:
-                        await update.message.reply_text(
-                            f"📰 *Сводка за {days} день(дней):*\n\n{summary}",
-                            parse_mode="Markdown",
-                        )
-                    except Exception as e:
-                        if "Can't parse entities" in str(e):
-                            # Отправляем без разметки
-                            await update.message.reply_text(
-                                f"📰 Сводка за {days} день(дней):\n\n{summary}"
-                            )
-                        else:
-                            raise
-            else:
+            if not articles:
                 await update.message.reply_text(
-                    "❌ Не удалось сгенерировать сводку. Попробуйте позже."
+                    "📭 За указанный период новостей не найдено."
+                )
+                return
+
+            summary = self.summary_generator.format_summary_with_links(articles, days)
+
+            if len(summary) > 4000:
+                parts = [summary[i : i + 4000] for i in range(0, len(summary), 4000)]
+                for i, part in enumerate(parts, 1):
+                    # Для частей используем безопасную отправку
+                    await self._safe_send_message(
+                        update, f"📰 Часть {i}/{len(parts)}:\n\n{part}"
+                    )
+            else:
+                await self._safe_send_message(
+                    update, f"📰 *Сводка за {days} день(дней):*\n\n{summary}"
                 )
 
         except Exception as e:
             logger.error(f"Ошибка генерации сводки: {e}")
             await update.message.reply_text("❌ Произошла ошибка при генерации сводки.")
+
+    async def _safe_send_message(
+        self, update: Update, text: str, parse_mode: str = "MarkdownV2"
+    ):
+        """Безопасная отправка сообщения с Markdown"""
+        try:
+            await update.message.reply_text(text, parse_mode=parse_mode)
+        except Exception as e:
+            logger.warning(f"Ошибка Markdown, отправка без разметки: {e}")
+            # Убираем Markdown-разметку
+            import re
+
+            clean_text = re.sub(r"[*_`]", "", text)
+            await update.message.reply_text(clean_text)
 
     async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Статистика базы данных с красивыми полосками"""
@@ -235,7 +240,7 @@ class NewsTelegramBot:
             await update.message.reply_text("❌ Ошибка получения статистики.")
 
     async def news_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Поиск новостей по ключевым словам"""
+        """Поиск новостей по ключевым словам с ссылками"""
         if not context.args:
             await update.message.reply_text(
                 "❌ Укажите поисковый запрос.\nПример: `/news криптовалюта`",
@@ -250,7 +255,7 @@ class NewsTelegramBot:
 
         try:
             repo = ArticleRepository()
-            articles = await repo.search_articles(query, limit=10)
+            articles = await repo.search_articles_with_links(query, limit=10)
 
             if not articles:
                 await update.message.reply_text(
@@ -261,20 +266,27 @@ class NewsTelegramBot:
             result_text = f"🔍 *Результаты поиска по запросу '{query}':*\n\n"
 
             for i, article in enumerate(articles, 1):
-                title = article.get("raw_title", "Без заголовка")[:80]
+                title = safe_markdown_text(
+                    article.get("raw_title", "Без заголовка")[:80]
+                )
                 published = article.get("published_at")
-                if published:
-                    time_str = published.strftime("%d.%m %H:%M")
-                else:
-                    time_str = "Дата неизвестна"
-                result_text += f"{i}. *{title}*...\n"
-                result_text += f"   🕐 {time_str}\n\n"
+                time_str = (
+                    published.strftime("%d.%m %H:%M")
+                    if published
+                    else "Дата неизвестна"
+                )
+                url = article.get("url", "")
 
-                if len(result_text) > 3000:
-                    result_text += "...\n*Слишком много результатов, показаны первые 5*"
+                result_text += f"{i}. *{title}*...\n"
+                result_text += f"   🕐 {time_str}\n"
+                if url:
+                    result_text += f"   🔗 {url}\n\n"
+
+                if len(result_text) > 3500:
+                    result_text += "...\n*Показаны первые {i} результатов*"
                     break
 
-            await update.message.reply_text(result_text, parse_mode="Markdown")
+            await self._safe_send_message(update, result_text)
 
         except Exception as e:
             logger.error(f"Ошибка поиска новостей: {e}")
