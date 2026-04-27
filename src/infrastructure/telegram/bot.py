@@ -595,11 +595,15 @@ class NewsTelegramBot:
 
             response = f"📊 *Сводка за последние {hours} часов*\n\n"
 
+            logger.info(f"First summary period_start: {summaries[0]['period_start']}, type: {type(summaries[0]['period_start'])}")
+            logger.info(f"Now (server time): {datetime.now()}")
+
             for s in summaries[-12:]:
                 period_start = s["period_start"]
+                msk_time = period_start + timedelta(hours=3)
+                time_str = msk_time.strftime("%H:%M")
                 content = s["content"]
                 if isinstance(content, dict):
-                    time_str = period_start.strftime("%H:%M")
                     summary = content.get("summary", "Нет данных")
                     response += f"🕐 *{time_str}*: {summary}\n\n"
 
