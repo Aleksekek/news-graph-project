@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  parser:
+  scheduler:
     build:
       context: .
       dockerfile: services/parser/Dockerfile
-    container_name: news_graph_parser
+    container_name: news_graph_scheduler
     volumes:
       - ./logs:/app/logs
       - ./config/schedule_config.yaml:/app/config/schedule_config.yaml
