@@ -240,8 +240,9 @@ class NewsTelegramBot:
 
     # ==================== МЕНЮ ====================
 
-    async def main_menu(self, query):
+    async def main_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать главное меню."""
+        query = update.callback_query
         await query.edit_message_text(
             "🏠 *Главное меню*\n\nВыберите действие:",
             reply_markup=InlineKeyboardMarkup(
@@ -258,8 +259,9 @@ class NewsTelegramBot:
         )
         await query.answer()
 
-    async def show_summaries_menu(self, query):
+    async def show_summaries_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню сводок."""
+        query = update.callback_query
         text = "📰 *Сводки новостей*\n\nВыберите период:"
         keyboard = [
             [InlineKeyboardButton("🕐 За 6 часов", callback_data="brief_6h")],
@@ -272,8 +274,9 @@ class NewsTelegramBot:
         )
         await query.answer()
 
-    async def show_search_menu(self, query):
+    async def show_search_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню поиска."""
+        query = update.callback_query
         text = "🔍 *Поиск новостей*\n\nВыберите популярный запрос или введите свой:"
         keyboard = [
             [InlineKeyboardButton("💰 Нефть", callback_data="search_popular:нефть")],
@@ -290,8 +293,9 @@ class NewsTelegramBot:
         # Возвращаем SEARCH_STATE для обработки текста
         return SEARCH_STATE
 
-    async def show_stats_menu(self, query):
+    async def show_stats_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню статистики."""
+        query = update.callback_query
         text = "📊 *Статистика*\n\nВыберите тип:"
         keyboard = [
             [InlineKeyboardButton("📈 Общая статистика", callback_data="stats_overall")],
@@ -303,8 +307,9 @@ class NewsTelegramBot:
         )
         await query.answer()
 
-    async def show_subscribe_menu(self, query):
+    async def show_subscribe_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню подписки."""
+        query = update.callback_query
         chat_id = query.message.chat.id
         is_subscribed = chat_id in self.subscribers
 
@@ -323,8 +328,9 @@ class NewsTelegramBot:
         )
         await query.answer()
 
-    async def show_help_menu(self, query):
+    async def show_help_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню помощи."""
+        query = update.callback_query
         help_text = """
 📚 *Помощь*
 
@@ -387,8 +393,9 @@ class NewsTelegramBot:
             logger.error(f"Ошибка brief_command: {e}")
             await update.message.reply_text("❌ Ошибка получения сводки")
 
-    async def brief_6h(self, query):
+    async def brief_6h(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Сводка за 6 часов."""
+        query = update.callback_query
         await query.edit_message_text("📊 Генерирую сводку за 6 часов...")
 
         # Создаём mock update
@@ -401,8 +408,9 @@ class NewsTelegramBot:
         await self.brief_command(MockUpdate(query), None)
         await query.answer()
 
-    async def brief_custom_prompt(self, query):
+    async def brief_custom_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Запрос произвольного диапазона."""
+        query = update.callback_query
         await query.edit_message_text(
             "✏️ *Свой диапазон*\n\n" "Введите количество часов (от 1 до 168):\n\n" "Пример: `24`"
         )
@@ -472,16 +480,18 @@ class NewsTelegramBot:
 
     # ==================== ПОИСК ====================
 
-    async def search_prompt(self, query):
+    async def search_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Запрос поискового запроса."""
+        query = update.callback_query
         await query.edit_message_text(
             "🔍 *Поиск новостей*\n\n" "Введите поисковый запрос:\n\n" "Пример: `криптовалюта`"
         )
         await query.answer()
         return SEARCH_STATE
 
-    async def search_popular(self, query):
+    async def search_popular(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка популярного запроса."""
+        query = update.callback_query
         keyword = query.data.split(":")[1]
         await query.edit_message_text(f"🔍 Ищу новости по запросу '{keyword}'...")
 
@@ -550,8 +560,9 @@ class NewsTelegramBot:
 
     # ==================== ВОПРОСЫ ====================
 
-    async def ask_prompt(self, query):
+    async def ask_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Запрос вопроса."""
+        query = update.callback_query
         await query.edit_message_text(
             "🤖 *Задать вопрос*\n\n"
             "Напишите ваш вопрос о текущей новостной повестке:\n\n"
@@ -650,8 +661,9 @@ class NewsTelegramBot:
             logger.error(f"Ошибка stats_command: {e}")
             await update.message.reply_text("❌ Ошибка получения статистики")
 
-    async def stats_overall(self, query):
+    async def stats_overall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Общая статистика из меню."""
+        query = update.callback_query
         await query.edit_message_text("📊 Собираю статистику...")
 
         class MockUpdate:
@@ -663,8 +675,9 @@ class NewsTelegramBot:
         await self.stats_command(MockUpdate(query), None)
         await query.answer()
 
-    async def stats_hourly(self, query):
+    async def stats_hourly(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Почасовая статистика."""
+        query = update.callback_query
         await query.edit_message_text("📊 Собираю почасовую статистику...")
 
         try:
@@ -719,8 +732,9 @@ class NewsTelegramBot:
         else:
             await update.message.reply_text("❌ Вы не были подписаны на рассылку.")
 
-    async def subscribe_from_menu(self, query):
+    async def subscribe_from_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Подписка из меню."""
+        query = update.callback_query
         chat_id = query.message.chat.id
 
         if chat_id in self.subscribers:
@@ -740,8 +754,9 @@ class NewsTelegramBot:
             )
         await query.answer()
 
-    async def unsubscribe_from_menu(self, query):
+    async def unsubscribe_from_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Отписка из меню."""
+        query = update.callback_query
         chat_id = query.message.chat.id
 
         if chat_id in self.subscribers:
