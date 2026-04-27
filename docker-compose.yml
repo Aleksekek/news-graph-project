@@ -37,7 +37,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
     volumes:
       - ./logs:/app/logs
-    command: python -m src.infrastructure.scheduling.summarization_runner
+    command: python -m src.domain.scheduling.summarization_runner
     restart: unless-stopped
     networks:
       - news_network
