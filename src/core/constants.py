@@ -1,29 +1,14 @@
-"""Константы проекта"""
+"""
+Константы проекта - ID источников, категории, тикеры.
+"""
 
-# Идентификаторы источников
+# Идентификаторы источников в БД
 SOURCE_IDS = {
     "tinvest": 1,
     "lenta": 2,
 }
 
-# Типы сущностей
-ENTITY_TYPES = {
-    "organization": "organization",
-    "person": "person",
-    "location": "location",
-    "product": "product",
-    "event": "event",
-}
-
-# Статусы статей
-ARTICLE_STATUSES = {
-    "raw": "raw",  # Необработанная
-    "processed": "processed",  # Обработанная NLP
-    "failed": "failed",  # Ошибка обработки
-    "skipped": "skipped",  # Пропущена (пустая и т.д.)
-}
-
-# Категории Lenta.ru
+# Категории Lenta.ru по умолчанию
 LENTA_CATEGORIES = [
     "Россия",
     "Бывший СССР",
@@ -34,7 +19,7 @@ LENTA_CATEGORIES = [
     "Интернет и СМИ",
 ]
 
-# Тикеры ТПульса
+# Тикеры TInvest по умолчанию
 TINVEST_TICKERS = [
     "SBER",
     "VTBR",
@@ -52,3 +37,16 @@ TINVEST_TICKERS = [
     "PHOR",
     "MGNT",
 ]
+
+# Статусы статей
+ARTICLE_STATUS = {
+    "RAW": "raw",  # Не обработана NLP
+    "PROCESSED": "processed",  # Обработана
+    "FAILED": "failed",  # Ошибка обработки
+}
+
+# Типы суммаризаций
+SUMMARY_TYPES = {
+    "HOUR": "hour",
+    "DAY": "day",
+}

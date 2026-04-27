@@ -1,0 +1,10 @@
+aiohttp==3.13.5
+APScheduler==3.11.2
+asyncpg==0.31.0
+beautifulsoup4==4.14.3
+dotenv==0.9.9
+feedparser==6.0.12
+pydantic==2.13.3
+pydantic-settings==2.14.0
+PyYAML==6.0.3
+tpulse==0.1.9

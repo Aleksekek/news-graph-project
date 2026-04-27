@@ -1,13 +1,19 @@
-"""Pydantic модели данных"""
+"""
+Pydantic модели данных проекта.
+Все модели в одном месте для чёткости.
+"""
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ParsedItem(BaseModel):
-    """Унифицированная модель распарсенного элемента"""
+    """
+    Унифицированная модель распарсенного элемента.
+    Результат работы любого парсера.
+    """
 
     source_id: int
     source_name: str
@@ -20,12 +26,13 @@ class ParsedItem(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     raw_data: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ArticleForDB(BaseModel):
-    """Модель для сохранения в БД"""
+    """
+    Модель для сохранения в БД (raw_articles).
+    """
 
     source_id: int
     original_id: str
@@ -41,12 +48,13 @@ class ArticleForDB(BaseModel):
     media_content: Optional[str] = None
     status: str = "raw"
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProcessingStats(BaseModel):
-    """Статистика обработки"""
+    """
+    Статистика обработки (для возврата из use cases).
+    """
 
     total_rows: int = 0
     saved: int = 0
@@ -54,7 +62,6 @@ class ProcessingStats(BaseModel):
     errors: int = 0
 
     def add(self, other: "ProcessingStats") -> "ProcessingStats":
-        """Сложение статистик"""
         return ProcessingStats(
             total_rows=self.total_rows + other.total_rows,
             saved=self.saved + other.saved,
@@ -62,46 +69,22 @@ class ProcessingStats(BaseModel):
             errors=self.errors + other.errors,
         )
 
-
-# Для обратной совместимости с текущим кодом
-class PulsePost(BaseModel):
-    """Модель поста из Тинькофф Пульса (легаси)"""
-
-    date: str
-    time: str
-    username: str
-    post_text: str
-    target_ticker: str
-    mentioned_tickers: List[str]
-
-    @property
-    def published_datetime(self) -> Optional[datetime]:
-        """Объединённая дата и время"""
-        try:
-            return datetime.strptime(f"{self.date} {self.time}", "%Y-%m-%d %H:%M:%S")
-        except:
-            return None
+    model_config = ConfigDict(from_attributes=True)
 
 
-class LentaArticle(BaseModel):
-    """Модель статьи Lenta.ru (легаси)"""
+class ParserConfig(BaseModel):
+    """
+    Конфигурация парсера.
+    Передаётся в конструктор парсера.
+    """
 
-    guid: str
-    rss_title: str
-    rss_link: str
-    rss_author: Optional[str] = None
-    rss_published: Optional[datetime] = None
-    rss_category: Optional[str] = None
-    rss_summary: Optional[str] = None
-    html_title: str
-    full_text: str
-    lead_text: Optional[str] = None
-    html_author: Optional[str] = None
-    published_time: Optional[datetime] = None
-    keywords: List[str] = []
-    description: Optional[str] = None
-    media_content: List[Dict[str, Any]] = []
-    paragraphs_count: int = 0
-    word_count: int = 0
-    retrieved_at: datetime
-    source: str = "lenta.ru"
+    source_id: int
+    source_name: str
+    base_url: Optional[str] = None
+    request_delay: float = 1.0
+    max_retries: int = 3
+    timeout: int = 30
+    user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    # Разрешаем дополнительные поля для конкретных парсеров
+    model_config = ConfigDict(extra="allow")

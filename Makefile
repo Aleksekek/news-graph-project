@@ -1,67 +1,45 @@
-.PHONY: help install dev-install test lint format clean run-parser run-bot docker-up docker-down docker-build docker-logs
+.PHONY: help install build up down logs logs-parser logs-summarizer logs-bot clean test
 
 help:
 	@echo "Доступные команды:"
-	@echo "  install       - Установка зависимостей"
-	@echo "  dev-install   - Установка dev зависимостей"
-	@echo "  test          - Запуск тестов"
-	@echo "  lint          - Проверка кода"
-	@echo "  format        - Форматирование кода"
-	@echo "  clean         - Очистка временных файлов"
-	@echo "  run-parser    - Запуск парсера (Lenta.ru по умолчанию)"
-	@echo "  run-bot       - Запуск телеграм бота"
-	@echo "  docker-build  - Сборка Docker образов"
-	@echo "  docker-up     - Запуск всех Docker контейнеров"
-	echo "  docker-down   - Остановка всех Docker контейнеров"
-	@echo "  docker-logs   - Просмотр логов"
-	@echo "  docker-restart-bot - Перезапуск только бота"
+	@echo "  install      - Установка зависимостей"
+	@echo "  build        - Сборка Docker образов"
+	@echo "  up           - Запуск всех сервисов"
+	@echo "  down         - Остановка всех сервисов"
+	@echo "  logs         - Просмотр логов всех сервисов"
+	@echo "  logs-parser  - Логи парсера"
+	@echo "  logs-summarizer - Логи суммаризатора"
+	@echo "  logs-bot     - Логи бота"
+	@echo "  clean        - Остановка и очистка"
+	@echo "  test         - Запуск тестов"
 
 install:
-	pip install -e .
+	pip install -r requirements.txt
 
-dev-install:
-	pip install -e ".[dev]"
-
-test:
-	python -m pytest tests/ -v
-
-lint:
-	python -m ruff check src/
-	python -m mypy src/
-
-format:
-	python -m black src/ tests/
-	python -m isort src/ tests/
-
-clean:
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name ".coverage" -delete
-	find . -type d -name ".pytest_cache" -exec rm -rf {} +
-	find . -type d -name ".mypy_cache" -exec rm -rf {} +
-	find . -type d -name ".ruff_cache" -exec rm -rf {} +
-
-run-parser:
-	python -m scripts.run_parser --source lenta --limit 50
-
-run-bot:
-	python -m src.infrastructure.telegram.bot
-
-docker-build:
+build:
 	docker-compose build --no-cache
 
-docker-up:
+up:
 	docker-compose up -d
 
-docker-down:
+down:
 	docker-compose down
 
-docker-logs:
+logs:
 	docker-compose logs -f
 
-docker-logs-bot:
-	docker-compose logs -f telegram-bot
+logs-parser:
+	docker-compose logs -f parser
 
-docker-restart-bot:
-	docker-compose restart telegram-bot
+logs-summarizer:
+	docker-compose logs -f summarizer
+
+logs-bot:
+	docker-compose logs -f bot
+
+clean:
+	docker-compose down -v
+	docker system prune -f
+
+test:
+	pytest tests/ -v --cov=src --cov-report=term

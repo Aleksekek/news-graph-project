@@ -1,0 +1,72 @@
+name: Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  manual-deploy:
+    name: 🚀 Manual Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run tests (if not skipped)
+        if: inputs.skip_tests == false
+        run: |
+          pip install pytest pytest-asyncio
+          pytest tests/unit/ -v
+      
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+          PARSER_REQUEST_DELAY=${{ vars.PARSER_REQUEST_DELAY }}
+          PARSER_MAX_RETRIES=${{ vars.PARSER_MAX_RETRIES }}
+          PARSER_TIMEOUT=${{ vars.PARSER_TIMEOUT }}
+          LOG_LEVEL=${{ vars.LOG_LEVEL }}
+          LOG_DIR=${{ vars.LOG_DIR }}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ADMIN_CHAT_ID=${{ secrets.ADMIN_CHAT_ID }}
+          PROXY_URL=${{ secrets.PROXY_URL }}
+          TIMEZONE=${{ vars.TIMEZONE }}
+          EOF
+      
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/newsapp/news_graph
+            git pull origin main
+            docker-compose down
+            docker-compose up -d --build
+            docker image prune -f
+      
+      - name: Notify completion
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id=${{ secrets.ADMIN_CHAT_ID }} \
+            -d text="✅ Manual deployment to ${{ inputs.environment }} completed!"
