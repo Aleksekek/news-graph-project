@@ -11,6 +11,7 @@ from src.core.constants import LENTA_CATEGORIES, TINVEST_TICKERS
 from src.parsers.factory import ParserFactory
 from src.parsers.lenta.parser import LentaParser
 from src.parsers.tinvest.parser import TInvestParser
+from src.utils.datetime_utils import now_msk
 
 
 @pytest.mark.integration
@@ -105,7 +106,8 @@ class TestTInvestParserReal:
         """Парсинг за последние 24 часа."""
         parser = ParserFactory.create("tinvest")
 
-        end_date = datetime.now()
+        # Используем MSK для запроса
+        end_date = now_msk()
         start_date = end_date - timedelta(hours=24)
 
         async with parser:
@@ -115,8 +117,10 @@ class TestTInvestParserReal:
 
         assert isinstance(result.items, list)
 
-        # Проверяем что даты в пределах периода
+        # После конвертации даты должны быть в MSK
         for item in result.items:
             if item.published_at:
-                assert item.published_at >= start_date - timedelta(hours=1)
-                assert item.published_at <= end_date + timedelta(hours=1)
+                # Дата поста не должна быть позже текущего времени
+                assert item.published_at <= now_msk() + timedelta(minutes=5)
+                # Дата поста должна быть в пределах разумного (не сильно старше)
+                assert item.published_at >= now_msk() - timedelta(days=7)

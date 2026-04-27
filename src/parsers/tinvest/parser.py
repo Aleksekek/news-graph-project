@@ -13,7 +13,7 @@ from tpulse import TinkoffPulse
 from src.core.exceptions import ParserError
 from src.core.models import ParsedItem
 from src.parsers.base import BaseParser, ParserConfig, ParseResult
-from src.utils.datetime_utils import utc_to_msk
+from src.utils.datetime_utils import now_msk, utc_to_msk
 from src.utils.logging import log_async_execution_time
 
 
@@ -326,30 +326,30 @@ class TInvestParser(BaseParser):
         return owner.get("nickname", "") or owner.get("name", "") or "Аноним"
 
     def _extract_date(self, post: Dict[str, Any]) -> Optional[datetime]:
-        """Извлечение даты из поста TInvest."""
+        """Извлечение и конвертация даты из UTC в MSK (TInvest API)."""
         try:
             inserted = post.get("inserted", "")
             if not inserted:
                 return None
-            
-            # Парсим ISO формат
+
+            # TInvest возвращает время в UTC
+            # Всегда конвертируем в MSK
             if inserted.endswith("Z"):
-                inserted = inserted[:-1]
-            
-            dt = datetime.fromisoformat(inserted)
-            
-            # Если время в посте меньше текущего MSK более чем на 2 часа,
-            # значит это UTC, конвертируем
-            from src.utils.datetime_utils import now_msk
-            now = now_msk()
-            
-            if (now - dt).total_seconds() > 7200:  # больше 2 часов разницы
-                from src.utils.datetime_utils import utc_to_msk
-                return utc_to_msk(dt.replace(tzinfo=timezone.utc))
-            
-            # Иначе считаем что уже MSK
-            return dt
-            
+                # С Z - точно UTC
+                dt = datetime.fromisoformat(inserted.replace("Z", "+00:00"))
+            else:
+                # Без Z - пробуем как есть, но всё равно сдвигаем
+                dt = datetime.fromisoformat(inserted)
+                # Если нет tzinfo, считаем что UTC
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+
+            return utc_to_msk(dt)
+
+        except Exception as e:
+            self.logger.debug(f"Ошибка парсинга даты: {e}")
+            return None
+
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга даты: {e}")
             return None
