@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings
 
 load_dotenv()
@@ -44,6 +44,39 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @field_validator("DB_PORT", mode="before")
+    @classmethod
+    def parse_db_port(cls, v):
+        """Преобразует строку в число, если нужно."""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return 5432
+        return v
+
+    @field_validator("PARSER_MAX_RETRIES", "PARSER_TIMEOUT", mode="before")
+    @classmethod
+    def parse_int(cls, v):
+        """Преобразует строку в число."""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return 3 if "RETRIES" in str(v) else 30
+        return v
+
+    @field_validator("PARSER_REQUEST_DELAY", mode="before")
+    @classmethod
+    def parse_float(cls, v):
+        """Преобразует строку в float."""
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return 2.0
+        return v
 
     @property
     def database_url(self) -> str:
