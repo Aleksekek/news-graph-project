@@ -326,27 +326,30 @@ class TInvestParser(BaseParser):
         return owner.get("nickname", "") or owner.get("name", "") or "Аноним"
 
     def _extract_date(self, post: Dict[str, Any]) -> Optional[datetime]:
-        """Извлечение и конвертация даты в MSK."""
+        """Извлечение даты из поста TInvest."""
         try:
             inserted = post.get("inserted", "")
             if not inserted:
                 return None
-
-            # Формат: "2026-04-27T19:39:56Z"
-            inserted = inserted.replace("Z", "+00:00")
-
-            # Парсим
+            
+            # Парсим ISO формат
+            if inserted.endswith("Z"):
+                inserted = inserted[:-1]
+            
             dt = datetime.fromisoformat(inserted)
-
-            # Конвертируем из UTC в MSK
-            if dt.tzinfo:
+            
+            # Если время в посте меньше текущего MSK более чем на 2 часа,
+            # значит это UTC, конвертируем
+            from src.utils.datetime_utils import now_msk
+            now = now_msk()
+            
+            if (now - dt).total_seconds() > 7200:  # больше 2 часов разницы
                 from src.utils.datetime_utils import utc_to_msk
-
-                return utc_to_msk(dt)
-            else:
-                # Если без tzinfo, считаем что это UTC
                 return utc_to_msk(dt.replace(tzinfo=timezone.utc))
-
+            
+            # Иначе считаем что уже MSK
+            return dt
+            
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга даты: {e}")
             return None
