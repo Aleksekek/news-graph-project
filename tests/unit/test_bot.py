@@ -252,9 +252,7 @@ class TestNewsTelegramBot:
         mock_update = Mock()
         mock_update.message = AsyncMock()
         mock_update.message.reply_text = AsyncMock()
-        # Убираем атрибут edit_message_text, чтобы бот пошёл по ветке else
-        if hasattr(mock_update, "edit_message_text"):
-            del mock_update.edit_message_text
+        mock_update.callback_query = None
 
         bot.summary_repo.get_for_period = AsyncMock(return_value=[])
 
@@ -388,65 +386,71 @@ class TestNewsTelegramBot:
     @pytest.mark.asyncio
     async def test_main_menu(self, bot):
         """Тест главного меню."""
-        mock_query = Mock()
-        mock_query.edit_message_text = AsyncMock()
-        mock_query.answer = AsyncMock()
+        mock_update = Mock()
+        mock_update.callback_query = AsyncMock()
+        mock_update.callback_query.edit_message_text = AsyncMock()
+        mock_update.callback_query.answer = AsyncMock()
 
-        await bot.main_menu(mock_query)
+        await bot.main_menu(mock_update, Mock())  # ← добавить context
 
-        mock_query.edit_message_text.assert_called_once()
-        mock_query.answer.assert_called_once()
+        mock_update.callback_query.edit_message_text.assert_called_once()
+        mock_update.callback_query.answer.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_show_summaries_menu(self, bot):
         """Тест меню сводок."""
-        mock_query = Mock()
-        mock_query.edit_message_text = AsyncMock()
-        mock_query.answer = AsyncMock()
+        mock_update = Mock()
+        mock_update.callback_query = AsyncMock()
+        mock_update.callback_query.edit_message_text = AsyncMock()
+        mock_update.callback_query.answer = AsyncMock()
 
-        await bot.show_summaries_menu(mock_query)
+        await bot.show_summaries_menu(mock_update, Mock())  # ← добавить context
 
-        mock_query.edit_message_text.assert_called_once()
-        mock_query.answer.assert_called_once()
+        mock_update.callback_query.edit_message_text.assert_called_once()
+        mock_update.callback_query.answer.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_show_search_menu(self, bot):
         """Тест меню поиска."""
-        mock_query = Mock()
-        mock_query.edit_message_text = AsyncMock()
-        mock_query.answer = AsyncMock()
+        mock_update = Mock()
+        mock_update.callback_query = AsyncMock()
+        mock_update.callback_query.edit_message_text = AsyncMock()
+        mock_update.callback_query.answer = AsyncMock()
 
-        await bot.show_search_menu(mock_query)
+        result = await bot.show_search_menu(mock_update, Mock())  # ← добавить context
 
-        mock_query.edit_message_text.assert_called_once()
-        mock_query.answer.assert_called_once()
+        assert result == 2  # SEARCH_STATE
+        mock_update.callback_query.edit_message_text.assert_called_once()
+        mock_update.callback_query.answer.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_subscribe_from_menu(self, bot):
         """Тест подписки из меню."""
-        mock_query = Mock()
-        mock_query.message.chat.id = 12345
-        mock_query.edit_message_text = AsyncMock()
-        mock_query.answer = AsyncMock()
+        mock_update = Mock()
+        mock_update.callback_query = AsyncMock()
+        mock_update.callback_query.message.chat.id = 12345
+        mock_update.callback_query.edit_message_text = AsyncMock()
+        mock_update.callback_query.answer = AsyncMock()
 
         bot.subscribers = {}
 
-        await bot.subscribe_from_menu(mock_query)
+        await bot.subscribe_from_menu(mock_update, Mock())  # ← добавить context
 
         assert 12345 in bot.subscribers
-        mock_query.answer.assert_called_once()
+        mock_update.callback_query.answer.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_unsubscribe_from_menu(self, bot):
         """Тест отписки из меню."""
-        mock_query = Mock()
-        mock_query.message.chat.id = 12345
-        mock_query.edit_message_text = AsyncMock()
-        mock_query.answer = AsyncMock()
+        mock_update = Mock()
+        mock_update.callback_query = AsyncMock()
+        mock_update.callback_query.message.chat.id = 12345
+        mock_update.callback_query.edit_message_text = AsyncMock()
+        mock_update.callback_query.answer = AsyncMock()
 
         bot.subscribers = {12345: {}}
 
-        await bot.unsubscribe_from_menu(mock_query)
+        await bot.unsubscribe_from_menu(mock_update, Mock())  # ← добавить context
 
         assert 12345 not in bot.subscribers
-        mock_query.answer.assert_called_once()
+        mock_update.callback_query.answer.assert_called_once()

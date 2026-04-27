@@ -448,10 +448,14 @@ class NewsTelegramBot:
 
             if not summaries:
                 msg = "📭 Дневная суммаризация за вчера ещё не готова.\nОбычно она появляется к 10 утра."
-                if hasattr(update, "edit_message_text"):
+                # Всегда используем reply_text, он работает и для сообщений, и для callback_query
+                if hasattr(update, "message") and update.message:
+                    await update.message.reply_text(msg)
+                elif hasattr(update, "edit_message_text"):
                     await update.edit_message_text(msg)
                 else:
-                    await update.message.reply_text(msg)
+                    # Если это callback_query
+                    await update.callback_query.edit_message_text(msg)
                 return
 
             s = summaries[0]
@@ -466,17 +470,28 @@ class NewsTelegramBot:
                 if content.get("trend"):
                     response += f"\n📈 *Тренд:* {content.get('trend')}\n"
 
-                if hasattr(update, "edit_message_text"):
+                if hasattr(update, "message") and update.message:
+                    await update.message.reply_text(response, parse_mode="Markdown")
+                elif hasattr(update, "edit_message_text"):
                     await update.edit_message_text(response, parse_mode="Markdown")
                 else:
-                    await update.message.reply_text(response, parse_mode="Markdown")
+                    await update.callback_query.edit_message_text(response, parse_mode="Markdown")
             else:
-                await update.message.reply_text("❌ Не удалось разобрать суммаризацию")
+                if hasattr(update, "message") and update.message:
+                    await update.message.reply_text("❌ Не удалось разобрать суммаризацию")
+                else:
+                    await update.callback_query.edit_message_text(
+                        "❌ Не удалось разобрать суммаризацию"
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка daily_command: {e}")
-            if hasattr(update, "message"):
+            if hasattr(update, "message") and update.message:
                 await update.message.reply_text("❌ Ошибка получения дневной сводки")
+            elif hasattr(update, "edit_message_text"):
+                await update.edit_message_text("❌ Ошибка получения дневной сводки")
+            else:
+                await update.callback_query.edit_message_text("❌ Ошибка получения дневной сводки")
 
     # ==================== ПОИСК ====================
 
