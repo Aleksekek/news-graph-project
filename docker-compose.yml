@@ -1,74 +1,45 @@
 version: '3.8'
 
 services:
-  scheduler:
-    build: .
-    container_name: news_graph_scheduler
+  parser:
+    build:
+      context: .
+      dockerfile: services/parser/Dockerfile
+    container_name: news_graph_parser
     volumes:
       - ./logs:/app/logs
-      - ./data:/app/data
       - ./config/schedule_config.yaml:/app/config/schedule_config.yaml
-    environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - TZ=${TIMEZONE:-Europe/Moscow}
     env_file:
       - .env
-    command: python -m src.domain.scheduling.runner
     restart: unless-stopped
     networks:
       - news_network
 
   summarizer:
-    build: .
+    build:
+      context: .
+      dockerfile: services/summarizer/Dockerfile
     container_name: news_graph_summarizer
-    environment:
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - TZ=${TIMEZONE:-Europe/Moscow}
     env_file:
       - .env
     volumes:
       - ./logs:/app/logs
-    command: python -m src.domain.scheduling.summarization_runner
     restart: unless-stopped
     networks:
       - news_network
-    depends_on:
-      - scheduler
 
-  telegram-bot:
-    build: .
+  bot:
+    build:
+      context: .
+      dockerfile: services/bot/Dockerfile
     container_name: news_graph_bot
     volumes:
       - ./logs:/app/logs
-    environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - PROXY_URL=${PROXY_URL}
-      - ADMIN_CHAT_ID=${ADMIN_CHAT_ID}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - TZ=${TIMEZONE:-Europe/Moscow}
     env_file:
       - .env
-    command: python -m src.infrastructure.telegram.bot
     restart: unless-stopped
     networks:
       - news_network
-    depends_on:
-      - summarizer  # Не обязательно, но для порядка
 
 networks:
   news_network:

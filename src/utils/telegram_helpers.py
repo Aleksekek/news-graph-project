@@ -1,3 +1,7 @@
+"""
+Вспомогательные функции для Telegram бота.
+"""
+
 import re
 from typing import Optional
 
@@ -5,7 +9,6 @@ from typing import Optional
 def escape_markdown(text: str, version: int = 2) -> str:
     """
     Экранирует спецсимволы для Telegram Markdown (v2).
-    Оставляет только намеренную разметку.
 
     Args:
         text: Исходный текст
@@ -14,6 +17,9 @@ def escape_markdown(text: str, version: int = 2) -> str:
     Returns:
         Экранированный текст
     """
+    if not text:
+        return ""
+
     if version == 1:
         # MarkdownV1: _ * [ ] ( ) ~ ` > # + - = | { } . !
         special_chars = r"_*[]()~`>#+-=|{}.!"
@@ -27,7 +33,6 @@ def escape_markdown(text: str, version: int = 2) -> str:
 def safe_markdown_text(content: str, wrap_bold: bool = False) -> str:
     """
     Подготавливает текст для безопасной отправки с Markdown разметкой.
-    Экранирует всё, кроме специальных маркеров, которые мы явно добавим.
 
     Args:
         content: Исходный текст
@@ -36,6 +41,9 @@ def safe_markdown_text(content: str, wrap_bold: bool = False) -> str:
     Returns:
         Безопасный текст с разметкой
     """
+    if not content:
+        return ""
+
     # Сначала экранируем всё
     escaped = escape_markdown(content)
 
@@ -46,7 +54,20 @@ def safe_markdown_text(content: str, wrap_bold: bool = False) -> str:
 
 
 def truncate_with_ellipsis(text: str, max_length: int = 80) -> str:
-    """Обрезает текст до максимальной длины с многоточием"""
+    """
+    Обрезает текст до максимальной длины с многоточием.
+
+    Args:
+        text: Исходный текст
+        max_length: Максимальная длина
+
+    Returns:
+        Обрезанный текст
+    """
+    if not text:
+        return ""
+
     if len(text) <= max_length:
         return text
+
     return text[: max_length - 3].strip() + "..."

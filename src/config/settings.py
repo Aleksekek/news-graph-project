@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
-from pydantic import Field, PostgresDsn
+from pydantic import ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings
 
 load_dotenv()
@@ -11,41 +11,81 @@ load_dotenv()
 class Settings(BaseSettings):
     """Основные настройки проекта"""
 
-    # Настройки БД
-    DB_HOST: str = Field("localhost", env="DB_HOST")
-    DB_PORT: int = Field(5432, env="DB_PORT")
-    DB_NAME: str = Field("news_graph", env="DB_NAME")
-    DB_USER: str = Field("postgres", env="DB_USER")
-    DB_PASSWORD: str = Field("", env="DB_PASSWORD")
+    # База данных
+    DB_HOST: str = Field(default="localhost", alias="DB_HOST")
+    DB_PORT: int = Field(default=5432, alias="DB_PORT")
+    DB_NAME: str = Field(default="news_graph", alias="DB_NAME")
+    DB_USER: str = Field(default="postgres", alias="DB_USER")
+    DB_PASSWORD: str = Field(default="", alias="DB_PASSWORD")
 
     # LLM
-    DEEPSEEK_API_KEY: str = Field("", env="DEEPSEEK_API_KEY")
+    DEEPSEEK_API_KEY: str = Field(default="", alias="DEEPSEEK_API_KEY")
 
-    # Настройки парсеров
-    PARSER_REQUEST_DELAY: float = Field(2.0, env="PARSER_REQUEST_DELAY")
-    PARSER_MAX_RETRIES: int = Field(3, env="PARSER_MAX_RETRIES")
-    PARSER_TIMEOUT: int = Field(30, env="PARSER_TIMEOUT")
+    # Парсеры
+    PARSER_REQUEST_DELAY: float = Field(default=2.0, alias="PARSER_REQUEST_DELAY")
+    PARSER_MAX_RETRIES: int = Field(default=3, alias="PARSER_MAX_RETRIES")
+    PARSER_TIMEOUT: int = Field(default=30, alias="PARSER_TIMEOUT")
 
     # Логирование
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
-    LOG_DIR: str = Field("logs", env="LOG_DIR")
+    LOG_LEVEL: str = Field(default="INFO", alias="LOG_LEVEL")
+    LOG_DIR: str = Field(default="logs", alias="LOG_DIR")
 
-    # Телеграм (опционально)
-    TELEGRAM_BOT_TOKEN: Optional[str] = Field(None, env="TELEGRAM_BOT_TOKEN")
-    ADMIN_CHAT_ID: Optional[str] = Field(None, env="ADMIN_CHAT_ID")
-    PROXY_URL: Optional[str] = Field(None, env="PROXY_URL")
+    # Telegram
+    TELEGRAM_BOT_TOKEN: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    ADMIN_CHAT_ID: Optional[str] = Field(default=None, alias="ADMIN_CHAT_ID")
+    PROXY_URL: Optional[str] = Field(default=None, alias="PROXY_URL")
 
     # Время
-    TIMEZONE: str = Field("Europe/Moscow", env="TIMEZONE")
+    TIMEZONE: str = Field(default="Europe/Moscow", alias="TIMEZONE")
+
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @field_validator("DB_PORT", mode="before")
+    @classmethod
+    def parse_db_port(cls, v):
+        """Преобразует строку в число, если нужно."""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return 5432
+        return v
+
+    @field_validator("PARSER_MAX_RETRIES", "PARSER_TIMEOUT", mode="before")
+    @classmethod
+    def parse_int(cls, v):
+        """Преобразует строку в число."""
+        if isinstance(v, str):
+            try:
+                return int(v)
+            except ValueError:
+                return 3 if "RETRIES" in str(v) else 30
+        return v
+
+    @field_validator("PARSER_REQUEST_DELAY", mode="before")
+    @classmethod
+    def parse_float(cls, v):
+        """Преобразует строку в float."""
+        if isinstance(v, str):
+            try:
+                return float(v)
+            except ValueError:
+                return 2.0
+        return v
 
     @property
     def database_url(self) -> str:
-        """URL подключения к PostgreSQL"""
+        """URL для asyncpg"""
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def database_dict(self) -> Dict[str, Any]:
-        """Параметры подключения как словарь для psycopg2"""
+        """Параметры для psycopg2 (если нужно)"""
         return {
             "host": self.DB_HOST,
             "port": self.DB_PORT,
@@ -54,11 +94,6 @@ class Settings(BaseSettings):
             "password": self.DB_PASSWORD,
         }
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
-
-# Глобальный экземпляр настроек
+# Глобальный экземпляр
 settings = Settings()

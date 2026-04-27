@@ -1,49 +1,45 @@
-"""Исключения проекта"""
+"""
+Исключения проекта.
+"""
 
 
 class NewsGraphError(Exception):
-    """Базовое исключение проекта"""
+    """Базовое исключение проекта."""
 
     pass
 
 
 class ParserError(NewsGraphError):
-    """Ошибка парсера"""
+    """Ошибка парсинга."""
 
     pass
 
 
 class DatabaseError(NewsGraphError):
-    """Ошибка базы данных"""
+    """Ошибка базы данных."""
 
     pass
 
 
 class ConfigurationError(NewsGraphError):
-    """Ошибка конфигурации"""
+    """Ошибка конфигурации."""
 
     pass
 
 
 class ValidationError(NewsGraphError):
-    """Ошибка валидации данных"""
-
-    pass
-
-
-class RetryExhaustedError(NewsGraphError):
-    """Исчерпаны попытки повтора"""
+    """Ошибка валидации данных."""
 
     pass
 
 
 class SourceNotFoundError(NewsGraphError):
-    """Источник не найден"""
+    """Источник не найден."""
 
     pass
 
 
-class PermanentError(Exception):
-    """Ощибка для случаев, когда ретрай не помогает."""
+class RetryExhaustedError(NewsGraphError):
+    """Исчерпаны попытки повтора."""
 
     pass

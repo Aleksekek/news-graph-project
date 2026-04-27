@@ -1,94 +1,98 @@
-```text
-news_graph_project/
-├── .env.example                   
-├── .gitignore                     
-├── docker-compose.yml             
-├── Dockerfile                     
-├── pyproject.toml                 # Конфигурация
-├── requirements.txt               # Зависимости
-├── README.md                      
-├── Makefile                       
-│
-├── .github/                       # Github Actions
-│   ├── workflows/                 # Список воркфлоу
-│   │   └── deploy.yml             # Основной воркфлоу сборки и деплоя
-│
-├── src/                           # Все исходники здесь
-│   │
-│   ├── main.py                    # Точка входа
-│   │
-│   ├── core/                      # Ядро - модели, константы, исключения
-│   │   ├── models.py              # Все Pydantic/датаклассы вместе
-│   │   ├── schemas.py             # Схемы валидации
-│   │   ├── exceptions.py          # Все исключения проекта
-│   │   └── constants.py           # Константы (SOURCE_IDS, и т.д.)
-│   │
-│   ├── config/                    # Конфигурация
-│   │   ├── settings.py            # Основные настройки
-│   │   ├── database.py            # Конфигурация БД
-│   │   └── schedules.py           # Конфигурация расписания
-│   │
-│   ├── domain/                    # Бизнес-логика
-│   │   │
-│   │   ├── parsing/               # Вся логика парсинга
-│   │   │   ├── base.py            # Базовые классы (BaseParser, BaseProcessor)
-│   │   │   ├── factory.py         # Сборщик парсеров
-│   │   │   ├── parsers/           # Конкретные парсеры
-│   │   │   │   ├── lenta.py       # LentaParser + LentaArchiveParser
-│   │   │   │   └── tinvest.py     # PulseParser
-│   │   │   │
-│   │   │   └── processors/        # Процессоры/адаптеры
-│   │   │       ├── base.py        # BaseProcessor
-│   │   │       ├── factory.py     # Сборщик процессоров
-│   │   │       ├── lenta.py       # LentaProcessor
-│   │   │       └── tinvest.py     # TInvestParserAdapter → TInvestProcessor
-│   │   │
-│   │   ├── processing/            # Логика обработки скачанных постов
-│   │   │   ├── llm_analyzer.py    # LLM обработчик
-│   │   │   ├── nlp_worker.py      # Базовая nlp обработка
-│   │   │   ├── summarization_service.py # Сервис для работы с суммаризацией
-│   │   │   └── summary_generator.py # Базовый суммаризатор для бота
-│   │   │
-│   │   ├── storage/               # Работа с хранилищами
-│   │   │   ├── database.py        # DatabaseWriter → ArticleRepository
-│   │   │   ├── models.py          # SQLAlchemy модели
-│   │   │   └── summarization_repository # Работа с суммаризациями
-│   │   │ 
-│   │   └── scheduling/            # Планирование задач
-│   │       ├── scheduler.py       # TaskScheduler
-│   │       ├── runner.py          # scheduler_runner.py
-│   │       └── summarization_runner.py # summarization_runner.py
-│   │
-│   ├── application/               # Оркестрация (use cases)
-│   │   ├── use_cases/             # Сценарии использования
-│   │   │   ├── parse_source.py    # Сценарий парсинга источника
-│   │   │   └── process_articles.py # Сценарий обработки статей
-│   │   │
-│   │   └── cli/                   # CLI команды
-│   │       ├── commands.py        # Все команды
-│   │       └── utils.py           # Вспомогательные функции для CLI
-│   │
-│   ├── infrastructure/            # Внешние взаимодействия
-│   │   ├── http/                  # HTTP клиенты
-│   │   │   ├── client.py          # Базовый HTTP клиент
-│   │   │   └── session.py         # Сессии с retry логикой
-│   │   │
-│   │   └── telegram/              # Телеграм бот
-│   │       └── bot.py             # Основной бот
-│   │
-│   └── utils/                     # Вспомогательные утилиты
-│       ├── logging.py             # Конфиг логирования
-│       ├── data.py                # Общие data utils
-│       ├── retry.py               # Логика повторных попыток
-│       └── telegram_helpers.py    # Вспомогательные функции для обработки markdown
-│
-├── scripts/                       # Скрипты запуска
-│   ├── run_parser.py              # Универсальный скрипт запуска
-│   └── nlp_worker.py     
-│
-└── tests/
-    ├── llm_con_test.py            # Тест подключения к API LLM
-    ├── test_db_connections.py     # Тесты подключения к БД
-    ├── test_full_integration.py   # Полные интеграционные тесты     
-    └── test.py                    # Базовые тесты
+# News Graph Project
+
+Агрегатор новостей с автоматическим парсингом, суммаризацией через LLM и Telegram ботом.
+
+## 🚀 Быстрый старт
+
+```bash
+# Клонирование
+git clone https://github.com/yourusername/news_graph_project.git
+cd news_graph_project
+
+# Настройка
+cp .env.example .env
+# Заполните .env своими данными
+
+# Запуск всех сервисов
+docker-compose up -d
+
+# Или по отдельности
+make up           # все сервисы
+make up-parser    # только парсер
+make up-bot       # только бот
 ```
+
+## 📦 Сервисы
+
+| Сервис | Описание |
+|--------|----------|
+| **Parser** | Сбор новостей из источников |
+| **Summarizer** | Генерация сводок через LLM API |
+| **Telegram Bot** | Интерактивный новостной бот |
+
+## 🛠 Команды
+
+```bash
+make help          # список всех команд
+make test          # запуск тестов
+make logs          # просмотр логов
+make restart-bot   # перезапуск бота
+make shell-parser  # вход в контейнер парсера
+```
+
+## 📁 Структура
+
+```
+src/
+├── app/           # Точки входа (scheduler, summarizer, bot)
+├── core/          # Модели, константы, исключения
+├── database/      # Репозитории и пул соединений
+├── parsers/       # Lenta, TInvest + конвертеры
+├── processing/    # LLM, суммаризация
+├── utils/         # datetime, logging, retry
+└── infrastructure/# Telegram бот
+```
+
+## 🧪 Тестирование
+
+```bash
+pytest tests/ -v                    # все тесты
+pytest tests/unit/ -v               # только unit
+pytest tests/integration/ -v -m integration  # интеграционные
+pytest tests/ --cov=src --cov-report=html   # покрытие
+```
+
+## 🔧 Переменные окружения
+
+Обязательные:
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- `DEEPSEEK_API_KEY`
+- `TELEGRAM_BOT_TOKEN`
+
+Опциональные:
+- `PROXY_URL` — host:port:user:pass
+- `ADMIN_CHAT_ID` — для уведомлений
+- `LOG_LEVEL` — DEBUG/INFO/WARNING/ERROR
+
+## 📊 Покрытие кода
+
+| Компонент | Покрытие |
+|-----------|----------|
+| core | 100% |
+| parsers | 73-83% |
+| utils | 70-82% |
+| app | 85% |
+| **Total** | **~75%** |
+
+## 📚 Документация
+
+- [Архитектура проекта](docs/architecture.md)
+- [Работа с часовыми поясами](docs/timezone_handling.md)
+- [Добавление нового источника](docs/adding_new_source.md)
+
+## 🤝 Contributing
+
+1. Форкните репозиторий
+2. Создайте ветку `feature/your-feature`
+3. Убедитесь что тесты проходят: `make test`
+4. Создайте Pull Request
