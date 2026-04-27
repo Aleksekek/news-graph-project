@@ -26,8 +26,6 @@ services:
   summarizer:
     build: .
     container_name: news_graph_summarizer
-    env_file:
-      - .env
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DB_HOST=${DB_HOST}
@@ -35,6 +33,9 @@ services:
       - DB_NAME=${DB_NAME}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      - TZ=${TIMEZONE:-Europe/Moscow}
+    env_file:
+      - .env
     volumes:
       - ./logs:/app/logs
     command: python -m src.domain.scheduling.summarization_runner
@@ -67,7 +68,7 @@ services:
     networks:
       - news_network
     depends_on:
-      - scheduler  # Не обязательно, но для порядка
+      - summarizer  # Не обязательно, но для порядка
 
 networks:
   news_network:
