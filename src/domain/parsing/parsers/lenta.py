@@ -51,17 +51,8 @@ class LentaParser(BaseParser):
         **kwargs,
     ) -> List[ParsedItem]:
         """
-        Унифицированный метод парсинга Lenta.ru.
-
-        Args:
-            limit: Максимальное количество новостей
-            categories: Фильтр по категориям (если None, берем из конфига)
-            **kwargs: Дополнительные параметры
-
-        Returns:
-            Список ParsedItem
+        Унифицированный метод парсинга Lenta.ru с асинхронной загрузкой.
         """
-        # Используем переданные категории или из конфига
         target_categories = categories if categories else self.default_categories
 
         self.logger.info(
@@ -71,35 +62,72 @@ class LentaParser(BaseParser):
         try:
             # Получаем RSS с фильтрацией по категориям
             rss_items = await self._fetch_rss_feed(limit, target_categories)
+            
+            if not rss_items:
+                self.logger.warning("RSS не вернул статей")
+                return []
 
-            # Парсим каждую статью
-            parsed_items = []
-            for i, rss_item in enumerate(rss_items[:limit]):
-                try:
-                    self.logger.debug(
-                        f"Парсинг статьи {i+1}/{len(rss_items)}: {rss_item.get('title', '')[:50]}..."
-                    )
-
-                    # Парсим HTML страницу
-                    article_data = await self._parse_article_page(rss_item["link"])
-
-                    if article_data:
+            # Ограничиваем количество
+            rss_items = rss_items[:limit]
+            
+            # Асинхронная загрузка с семафором для контроля параллелизма
+            semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+            
+            async def fetch_article_with_semaphore(rss_item: Dict[str, Any]) -> Optional[ParsedItem]:
+                """Загрузка одной статьи с контролем параллелизма"""
+                async with semaphore:
+                    try:
+                        self.logger.debug(f"Парсинг: {rss_item.get('title', '')[:50]}...")
+                        
+                        # Парсим HTML страницу
+                        article_data = await self._parse_article_page(rss_item["link"])
+                        
+                        if not article_data:
+                            return None
+                        
                         # Создаем ParsedItem
                         parsed_item = self._create_parsed_item(rss_item, article_data)
-
-                        if self.validate_item(parsed_item):
-                            parsed_items.append(parsed_item)
-
-                        # Задержка между запросами
-                        if i < len(rss_items) - 1:
-                            await self.delay_between_requests()
-
-                except Exception as e:
-                    self.logger.error(f"Ошибка парсинга статьи: {e}")
-                    continue
-
+                        
+                        if not self.validate_item(parsed_item):
+                            return None
+                        
+                        return parsed_item
+                        
+                    except Exception as e:
+                        self.logger.error(f"Ошибка парсинга статьи {rss_item.get('link', '')}: {e}")
+                        return None
+            
+            # Параллельная загрузка всех статей батчами
+            parsed_items = []
+            batch_size = self.max_concurrent_requests
+            total_items = len(rss_items)
+            
+            for batch_start in range(0, total_items, batch_size):
+                batch = rss_items[batch_start:batch_start + batch_size]
+                batch_num = batch_start // batch_size + 1
+                total_batches = (total_items + batch_size - 1) // batch_size
+                
+                self.logger.debug(f"Загрузка батча {batch_num}/{total_batches}: {len(batch)} статей")
+                
+                # Параллельная загрузка батча
+                batch_results = await asyncio.gather(
+                    *[fetch_article_with_semaphore(item) for item in batch],
+                    return_exceptions=False
+                )
+                
+                # Собираем успешные результаты
+                for result in batch_results:
+                    if result:
+                        parsed_items.append(result)
+                
+                self.logger.debug(f"Батч {batch_num}/{total_batches} завершен: +{len([r for r in batch_results if r])} статей")
+                
+                # Задержка между батчами для rate limiting
+                if batch_start + batch_size < total_items:
+                    await self.delay_between_requests()
+            
             self.logger.info(
-                f"Успешно распарсено {len(parsed_items)}/{len(rss_items)} статей"
+                f"Успешно распарсено {len(parsed_items)}/{total_items} статей"
             )
             return parsed_items
 
