@@ -38,7 +38,7 @@ class SummarizationService:
 
         # Получаем сбалансированную выборку статей за час
         articles = await self.repo.get_smart_articles_for_summarization(
-            period_start, period_end, total_limit=80
+            period_start, period_end, total_limit=50
         )
 
         if len(articles) < 3:
@@ -189,9 +189,9 @@ class SummarizationService:
             period_start = s["period_start"]
             content = s["content"]
             summary = (
-                content.get("summary", "")[:150]
+                content.get("summary", "")
                 if isinstance(content, dict)
-                else str(content)[:150]
+                else str(content)
             )
             lines.append(f"{period_start.strftime('%H:%M')}: {summary}")
         return "\n".join(lines)

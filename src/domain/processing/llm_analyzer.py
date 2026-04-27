@@ -44,15 +44,15 @@ class DeepSeekAnalyzer:
 
         # Формируем текстовое представление постов
         posts_text = []
-        for p in posts[:40]:  # Ограничиваем 40 постами на запрос
+        for p in posts:  # Ограничиваем 40 постами на запрос
             time_str = (
                 p["published_at"].strftime("%H:%M")
                 if p.get("published_at")
                 else "--:--"
             )
             source = p.get("source_name", "unknown")
-            title = p.get("title", "")[:150]
-            text = p.get("text", "")[:400]
+            title = p.get("title", "")
+            text = p.get("text", "")
             posts_text.append(f"[{time_str}] [{source}] {title}\n   {text}...\n")
 
         # Формируем промпт
