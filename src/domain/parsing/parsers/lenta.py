@@ -185,39 +185,38 @@ class LentaParser(BaseParser):
             items = []
             for entry in feed.entries[: limit * 2]:
                 try:
-                    # Парсим категорию
                     entry_category = ""
                     if entry.get("tags"):
                         entry_category = safe_str(entry.tags[0].term)
 
-                    # Фильтруем по категориям если указаны
                     if categories and entry_category:
                         if not any(
                             cat.lower() in entry_category.lower() for cat in categories
                         ):
                             continue
 
-                    # Парсим дату публикации - (timezone-aware)
+                    # Парсинг даты - КЛЮЧЕВОЕ МЕСТО
                     published_dt = None
                     if hasattr(entry, "published_parsed") and entry.published_parsed:
-                        # Создаем timestamp и конвертируем в UTC datetime
+                        # Получаем timestamp
                         timestamp = time.mktime(entry.published_parsed)
+                        # Создаем UTC datetime
                         utc_dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-                        # Конвертируем в MSK (UTC+3) и убираем tzinfo для БД
-                        published_dt = (utc_dt + timedelta(hours=3)).replace(tzinfo=None)
+                        # Прибавляем 3 часа для MSK
+                        msk_dt = utc_dt + timedelta(hours=3)
+                        # Убираем tzinfo для хранения в БД
+                        published_dt = msk_dt.replace(tzinfo=None)
                         self.logger.debug(f"RSS дата: {published_dt} (MSK)")
 
-                    items.append(
-                        {
-                            "guid": safe_str(entry.get("id", "")),
-                            "title": safe_str(entry.get("title", "")),
-                            "link": safe_str(entry.get("link", "")),
-                            "author": safe_str(entry.get("author", "")),
-                            "published": published_dt,
-                            "category": entry_category,
-                            "summary": safe_str(entry.get("summary", "")),
-                        }
-                    )
+                    items.append({
+                        "guid": safe_str(entry.get("id", "")),
+                        "title": safe_str(entry.get("title", "")),
+                        "link": safe_str(entry.get("link", "")),
+                        "author": safe_str(entry.get("author", "")),
+                        "published": published_dt,
+                        "category": entry_category,
+                        "summary": safe_str(entry.get("summary", "")),
+                    })
 
                 except Exception as e:
                     self.logger.warning(f"Ошибка обработки RSS элемента: {e}")
@@ -237,22 +236,13 @@ class LentaParser(BaseParser):
             html = await self.fetch_url(url)
             soup = BeautifulSoup(html, "html.parser")
 
-            # 1. Заголовок
             title = self._extract_title(soup)
-
-            # 2. Автор
             author = self._extract_author(soup)
-
-            # 3. Текст статьи
             content = self._extract_content(soup)
-
-            # 4. Дата публикации
+            
+            # Здесь ВАЖНО: время на странице уже в MSK, не нужно добавлять 3 часа
             published_time = self._extract_published_time(soup, url)
-
-            # 5. Категория
             category = self._extract_category(soup)
-
-            # 6. Мета-описание
             description = self._extract_description(soup)
 
             if not content or len(content.strip()) < 100:
@@ -264,7 +254,7 @@ class LentaParser(BaseParser):
                 "title": title,
                 "author": author,
                 "content": content,
-                "published_time": published_time,
+                "published_time": published_time,  # Уже MSK
                 "category": category,
                 "description": description,
                 "html": html,
@@ -633,10 +623,7 @@ class LentaParser(BaseParser):
     def _parse_lenta_time_format(self, text: str) -> Optional[datetime]:
         """
         Парсинг специфичного формата времени Lenta.ru.
-        Форматы:
-            "19:09, 17 января 2026"
-            "19:09, 17 января 2026 г."
-            "19:09, 17 янв 2026"
+        Формат: "19:09, 17 января 2026"
         """
         try:
             text = text.replace(" г.", "")
@@ -664,7 +651,9 @@ class LentaParser(BaseParser):
 
                 month = month_map.get(month_str.lower())
                 if month:
-                    return datetime(int(year), month, int(day), int(hour), int(minute))
+                    # Время на странице Lenta.ru уже в MSK
+                    dt = datetime(int(year), month, int(day), int(hour), int(minute))
+                    return dt  # без изменений, это уже MSK
 
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга формата Lenta: {text} - {e}")
@@ -727,16 +716,22 @@ class LentaParser(BaseParser):
         self, rss_item: Dict[str, Any], article_data: Dict[str, Any]
     ) -> ParsedItem:
         """Создание ParsedItem из RSS и HTML данных"""
+        
+        published_at = article_data["published_time"]
+        
+        if not published_at and rss_item.get("published"):
+            published_at = rss_item["published"]
+        
         return ParsedItem(
             source_id=self.source_id,
             source_name=self.source_name,
             original_id=self._generate_article_id(
-                article_data["url"], article_data["published_time"]
+                article_data["url"], published_at
             ),
             url=article_data["url"],
             title=article_data["title"] or rss_item["title"],
             content=article_data["content"],
-            published_at=rss_item["published"] or article_data["published_time"],
+            published_at=published_at,
             author=article_data["author"] or rss_item["author"],
             metadata={
                 "category": article_data["category"] or rss_item["category"],
