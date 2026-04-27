@@ -32,6 +32,9 @@ jobs:
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
 
+          # LLM
+          DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+
           # Парсеры
           PARSER_REQUEST_DELAY=${{ vars.PARSER_REQUEST_DELAY }}
           PARSER_MAX_RETRIES=${{ vars.PARSER_MAX_RETRIES }}
