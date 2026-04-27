@@ -681,7 +681,7 @@ class NewsTelegramBot:
 
             articles = (
                 await SummarizationRepository.get_smart_articles_for_summarization(
-                    period_start, datetime.now(), total_limit=30
+                    period_start, datetime.now(), total_limit=50
                 )
             )
 

@@ -8,9 +8,6 @@ news_graph_project/
 ├── requirements.txt               # Зависимости
 ├── README.md                      
 ├── Makefile                       
-├── test.py                        # Тесты
-├── test_db_connections.py         # Тесты подключения к БД
-├── test_full_integration.py       # Полные интеграционные тесты
 │
 ├── .github/                       # Github Actions
 │   ├── workflows/                 # Список воркфлоу
@@ -47,16 +44,20 @@ news_graph_project/
 │   │   │       └── tinvest.py     # TInvestParserAdapter → TInvestProcessor
 │   │   │
 │   │   ├── processing/            # Логика обработки скачанных постов
+│   │   │   ├── llm_analyzer.py    # LLM обработчик
 │   │   │   ├── nlp_worker.py      # Базовая nlp обработка
+│   │   │   ├── summarization_service.py # Сервис для работы с суммаризацией
 │   │   │   └── summary_generator.py # Базовый суммаризатор для бота
 │   │   │
 │   │   ├── storage/               # Работа с хранилищами
 │   │   │   ├── database.py        # DatabaseWriter → ArticleRepository
-│   │   │   └── models.py          # SQLAlchemy модели
+│   │   │   ├── models.py          # SQLAlchemy модели
+│   │   │   └── summarization_repository # Работа с суммаризациями
 │   │   │ 
 │   │   └── scheduling/            # Планирование задач
 │   │       ├── scheduler.py       # TaskScheduler
-│   │       └── runner.py          # scheduler_runner.py
+│   │       ├── runner.py          # scheduler_runner.py
+│   │       └── summarization_runner.py # summarization_runner.py
 │   │
 │   ├── application/               # Оркестрация (use cases)
 │   │   ├── use_cases/             # Сценарии использования
@@ -81,7 +82,13 @@ news_graph_project/
 │       ├── retry.py               # Логика повторных попыток
 │       └── telegram_helpers.py    # Вспомогательные функции для обработки markdown
 │
-└── scripts/                       # Скрипты запуска
-    ├── run_parser.py              # Универсальный скрипт запуска
-    └── nlp_worker.py              
+├── scripts/                       # Скрипты запуска
+│   ├── run_parser.py              # Универсальный скрипт запуска
+│   └── nlp_worker.py     
+│
+└── tests/
+    ├── llm_con_test.py            # Тест подключения к API LLM
+    ├── test_db_connections.py     # Тесты подключения к БД
+    ├── test_full_integration.py   # Полные интеграционные тесты     
+    └── test.py                    # Базовые тесты
 ```
