@@ -44,6 +44,7 @@ jobs:
           # Телеграм
           TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
           ADMIN_CHAT_ID=${{ secrets.ADMIN_CHAT_ID }}
+          PROXY_URL=${{ secrets.PROXY_URL }}
 
           # Время
           TIMEZONE=${{ vars.TIMEZONE }}

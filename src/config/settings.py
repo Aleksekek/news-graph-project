@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Телеграм (опционально)
     TELEGRAM_BOT_TOKEN: Optional[str] = Field(None, env="TELEGRAM_BOT_TOKEN")
     ADMIN_CHAT_ID: Optional[str] = Field(None, env="ADMIN_CHAT_ID")
+    PROXY_URL: Optional[str] = Field(None, env="PROXY_URL")
 
     # Время
     TIMEZONE: str = Field("Europe/Moscow", env="TIMEZONE")

@@ -1,17 +1,20 @@
-.PHONY: help install dev-install test lint format clean run-parser run-bot docker-up docker-down
+.PHONY: help install dev-install test lint format clean run-parser run-bot docker-up docker-down docker-build docker-logs
 
 help:
 	@echo "Доступные команды:"
 	@echo "  install       - Установка зависимостей"
 	@echo "  dev-install   - Установка dev зависимостей"
-	@echo "  test         - Запуск тестов"
-	@echo "  lint         - Проверка кода"
-	@echo "  format       - Форматирование кода"
-	@echo "  clean        - Очистка временных файлов"
-	@echo "  run-parser   - Запуск парсера Lenta.ru"
-	@echo "  run-bot      - Запуск телеграм бота"
-	@echo "  docker-up    - Запуск Docker контейнеров"
-	@echo "  docker-down  - Остановка Docker контейнеров"
+	@echo "  test          - Запуск тестов"
+	@echo "  lint          - Проверка кода"
+	@echo "  format        - Форматирование кода"
+	@echo "  clean         - Очистка временных файлов"
+	@echo "  run-parser    - Запуск парсера (Lenta.ru по умолчанию)"
+	@echo "  run-bot       - Запуск телеграм бота"
+	@echo "  docker-build  - Сборка Docker образов"
+	@echo "  docker-up     - Запуск всех Docker контейнеров"
+	echo "  docker-down   - Остановка всех Docker контейнеров"
+	@echo "  docker-logs   - Просмотр логов"
+	@echo "  docker-restart-bot - Перезапуск только бота"
 
 install:
 	pip install -e .
@@ -45,9 +48,20 @@ run-parser:
 run-bot:
 	python -m src.infrastructure.telegram.bot
 
+docker-build:
+	docker-compose build --no-cache
+
 docker-up:
 	docker-compose up -d
+
 docker-down:
 	docker-compose down
+
 docker-logs:
-	docker-compose logs -f scheduler
+	docker-compose logs -f
+
+docker-logs-bot:
+	docker-compose logs -f telegram-bot
+
+docker-restart-bot:
+	docker-compose restart telegram-bot

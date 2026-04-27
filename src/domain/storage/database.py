@@ -7,7 +7,7 @@ import asyncio
 import json
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Union
 
 import asyncpg
@@ -21,12 +21,6 @@ from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
 logger = get_logger("storage.database")
-
-
-class DatabaseError(PermanentError):
-    """Перманентная ошибка, требующая прекращения retry."""
-
-    pass
 
 
 class DatabasePoolManager:
@@ -295,6 +289,103 @@ class ArticleRepository:
             articles = [dict(row) for row in rows]
             self.logger.debug(f"📄 Получено {len(articles)} статей")
             return articles
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_articles_by_days(self, days: int, limit: int = 50) -> List[Dict]:
+        """Получить статьи за N дней"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                cutoff_date = datetime.now() - timedelta(days=days)
+                query = """
+                    SELECT raw_title, raw_text, published_at, author, source_id
+                    FROM raw_articles 
+                    WHERE published_at >= $1
+                    AND status != 'failed'
+                    AND LENGTH(raw_text) > 100
+                    ORDER BY published_at DESC
+                    LIMIT $2
+                """
+                rows = await conn.fetch(query, cutoff_date, limit)
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения статей за дни: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_articles_count(self) -> int:
+        """Получить общее количество статей"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM raw_articles WHERE status != 'failed'"
+                )
+                return count or 0
+        except Exception as e:
+            logger.error(f"Ошибка получения количества статей: {e}")
+            return 0
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_sources_stats(self) -> List[tuple]:
+        """Получить статистику по источникам"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT s.name, COUNT(r.id) as count
+                    FROM sources s
+                    LEFT JOIN raw_articles r ON s.id = r.source_id
+                    GROUP BY s.id, s.name
+                    ORDER BY count DESC
+                """
+                )
+                return [(row["name"], row["count"]) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения статистики по источникам: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_daily_stats(self, days: int = 7) -> List[tuple]:
+        """Получить ежедневную статистику за последние N дней"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                cutoff_date = datetime.now() - timedelta(days=days)
+                rows = await conn.fetch(
+                    """
+                    SELECT DATE(published_at) as date, COUNT(*) as count
+                    FROM raw_articles
+                    WHERE published_at >= $1
+                    AND status != 'failed'
+                    GROUP BY DATE(published_at)
+                    ORDER BY date DESC
+                """,
+                    cutoff_date,
+                )
+                return [(row["date"], row["count"]) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения дневной статистики: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def search_articles(self, query: str, limit: int = 10) -> List[Dict]:
+        """Поиск статей по ключевым словам"""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT raw_title, raw_text, published_at, author, source_id
+                    FROM raw_articles 
+                    WHERE (raw_title ILIKE $1 OR raw_text ILIKE $1)
+                    AND status != 'failed'
+                    ORDER BY published_at DESC
+                    LIMIT $2
+                """,
+                    f"%{query}%",
+                    limit,
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка поиска статей: {e}")
+            return []
 
     # ==================== СТАТИСТИКА ====================
 

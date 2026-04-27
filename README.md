@@ -47,7 +47,8 @@ news_graph_project/
 │   │   │       └── tinvest.py     # TInvestParserAdapter → TInvestProcessor
 │   │   │
 │   │   ├── processing/            # Логика обработки скачанных постов
-│   │   │   └── nlp_worker.py      # Базовая nlp обработка
+│   │   │   ├── nlp_worker.py      # Базовая nlp обработка
+│   │   │   └── summary_generator.py # Базовый суммаризатор для бота
 │   │   │
 │   │   ├── storage/               # Работа с хранилищами
 │   │   │   ├── database.py        # DatabaseWriter → ArticleRepository
