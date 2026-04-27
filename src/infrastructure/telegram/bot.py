@@ -364,7 +364,8 @@ class NewsTelegramBot:
         """Сводка за N часов."""
         try:
             hours = 6
-            if context.args:
+            # Защита от None context
+            if context and context.args:
                 try:
                     hours = int(context.args[0])
                     hours = max(1, min(168, hours))
@@ -704,7 +705,7 @@ class NewsTelegramBot:
 
             response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
             for hour, count in stats[:24]:
-                bar = "█" * min(count // 2, 20)
+                bar = "█" * min(count // 2, 20) if count > 0 else "░"
                 response += f"• {hour:02d}:00 {bar} {count}\n"
 
             keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_stats")]]

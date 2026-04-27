@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db
+from src.utils.datetime_utils import format_for_db, now_msk
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -23,9 +23,7 @@ class ArticleRepository:
     def __init__(self):
         self.logger = get_logger(self.__class__.__name__)
 
-    @async_retry(
-        exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0
-    )
+    @async_retry(exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0)
     async def save_batch(self, articles: List[ArticleForDB]) -> ProcessingStats:
         """
         Пакетное сохранение статей.
@@ -57,9 +55,7 @@ class ArticleRepository:
             existing_urls = set()
 
             for sid in source_ids:
-                rows = await conn.fetch(
-                    "SELECT url FROM raw_articles WHERE source_id = $1", sid
-                )
+                rows = await conn.fetch("SELECT url FROM raw_articles WHERE source_id = $1", sid)
                 existing_urls.update(row["url"] for row in rows)
 
             # Фильтруем новые
@@ -73,11 +69,7 @@ class ArticleRepository:
             batch_data = []
             for article in new_articles:
                 # Приводим дату к MSK naive
-                published_at = (
-                    format_for_db(article.published_at)
-                    if article.published_at
-                    else None
-                )
+                published_at = format_for_db(article.published_at) if article.published_at else None
 
                 batch_data.append(
                     (
@@ -109,9 +101,7 @@ class ArticleRepository:
             await conn.executemany(sql, batch_data)
             stats.saved = len(batch_data)
 
-            logger.info(
-                f"✅ Сохранено {stats.saved} статей (пропущено {stats.skipped})"
-            )
+            logger.info(f"✅ Сохранено {stats.saved} статей (пропущено {stats.skipped})")
 
         return stats
 
@@ -119,15 +109,11 @@ class ArticleRepository:
     async def get_existing_urls(self, source_id: int) -> Set[str]:
         """Получение всех URL для источника."""
         async with DatabasePoolManager.connection() as conn:
-            rows = await conn.fetch(
-                "SELECT url FROM raw_articles WHERE source_id = $1", source_id
-            )
+            rows = await conn.fetch("SELECT url FROM raw_articles WHERE source_id = $1", source_id)
             return {row["url"] for row in rows}
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_unprocessed(
-        self, limit: int = 100, status: str = "raw"
-    ) -> List[Dict[str, Any]]:
+    async def get_unprocessed(self, limit: int = 100, status: str = "raw") -> List[Dict[str, Any]]:
         """Получение необработанных статей для NLP."""
         async with DatabasePoolManager.connection() as conn:
             rows = await conn.fetch(
@@ -172,9 +158,7 @@ class ArticleRepository:
             return dict(row) if row else {}
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def search(
-        self, query: str, limit: int = 10, with_urls: bool = False
-    ) -> List[Dict]:
+    async def search(self, query: str, limit: int = 10, with_urls: bool = False) -> List[Dict]:
         """Поиск статей по тексту."""
         async with DatabasePoolManager.connection() as conn:
             url_field = ", url" if with_urls else ""
@@ -188,6 +172,54 @@ class ArticleRepository:
             """
             rows = await conn.fetch(sql, f"%{query}%", limit)
             return [dict(row) for row in rows]
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_sources_stats(self) -> List[tuple]:
+        """Получить статистику по источникам."""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT s.name, COUNT(r.id) as count
+                    FROM sources s
+                    LEFT JOIN raw_articles r ON s.id = r.source_id
+                    GROUP BY s.id, s.name
+                    ORDER BY count DESC
+                """
+                )
+                return [(row["name"], row["count"]) for row in rows]
+        except Exception as e:
+            logger.error(f"Ошибка получения статистики по источникам: {e}")
+            return []
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_daily_stats(self, days: int = 7) -> List[tuple]:
+        """Получить ежедневную статистику за последние N дней."""
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                cutoff_date = now_msk() - timedelta(days=days)
+                rows = await conn.fetch(
+                    """
+                    SELECT EXTRACT(HOUR FROM published_at) as hour, COUNT(*) as count
+                    FROM raw_articles
+                    WHERE published_at >= $1
+                    AND status != 'failed'
+                    GROUP BY EXTRACT(HOUR FROM published_at)
+                    ORDER BY hour ASC
+                """,
+                    cutoff_date,
+                )
+                # Возвращаем список кортежей (час, количество)
+                result = [(int(row["hour"]), row["count"]) for row in rows]
+                # Добавляем часы без записей
+                existing_hours = {h for h, _ in result}
+                for hour in range(24):
+                    if hour not in existing_hours:
+                        result.append((hour, 0))
+                return sorted(result, key=lambda x: x[0])
+        except Exception as e:
+            logger.error(f"Ошибка получения дневной статистики: {e}")
+            return []
 
     @staticmethod
     def _prepare_json(value: Any) -> Any:
