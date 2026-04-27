@@ -332,23 +332,54 @@ class TInvestParser(BaseParser):
             if not inserted:
                 return None
 
-            # TInvest возвращает время в UTC
-            # Всегда конвертируем в MSK
+            # Парсим входящую дату
             if inserted.endswith("Z"):
-                # С Z - точно UTC
                 dt = datetime.fromisoformat(inserted.replace("Z", "+00:00"))
             else:
-                # Без Z - пробуем как есть, но всё равно сдвигаем
                 dt = datetime.fromisoformat(inserted)
-                # Если нет tzinfo, считаем что UTC
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
 
-            return utc_to_msk(dt)
+            # Получаем текущее время в MSK
+            now_msk = datetime.now(timezone(timedelta(hours=3)))
 
-        except Exception as e:
-            self.logger.debug(f"Ошибка парсинга даты: {e}")
-            return None
+            # Пробуем интерпретировать dt как MSK или UTC?
+            # Проверяем оба варианта
+            dt_as_utc = dt.astimezone(timezone.utc)
+            dt_as_msk = (
+                dt.replace(tzinfo=timezone(timedelta(hours=3)))
+                if dt.tzinfo is None
+                else dt.astimezone(timezone(timedelta(hours=3)))
+            )
+
+            # Считаем разницу с текущим MSK для обоих вариантов
+            diff_utc = abs(
+                (now_msk - dt_as_utc.astimezone(timezone(timedelta(hours=3)))).total_seconds()
+            )
+            diff_msk = abs((now_msk - dt_as_msk).total_seconds())
+
+            # Выбираем тот вариант, который даёт меньшую разницу (ближе к текущему времени)
+            if diff_utc < diff_msk:
+                # Данные пришли в UTC, конвертируем в MSK
+                result = dt_as_utc.astimezone(timezone(timedelta(hours=3)))
+            else:
+                # Данные уже в MSK или близки к нему
+                result = dt_as_msk
+
+            # Финальная проверка: если разница между результатом и текущим MSK менее часа
+            final_diff = abs((now_msk - result).total_seconds())
+            if final_diff < 3600:  # менее часа
+                self.logger.debug(
+                    f"Разница менее часа ({final_diff/60:.1f} мин), преобразование не требуется"
+                )
+                # Возвращаем как есть (уже в MSK)
+                return result
+            else:
+                # Разница большая - всё равно конвертируем в MSK (на всякий случай)
+                self.logger.debug(
+                    f"Разница {final_diff/3600:.1f} ч, применяем стандартную конвертацию"
+                )
+                return utc_to_msk(dt)
 
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга даты: {e}")

@@ -4,7 +4,7 @@ Telegram бот для News Graph Project.
 
 import logging
 import warnings
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -364,7 +364,6 @@ class NewsTelegramBot:
         """Сводка за N часов."""
         try:
             hours = 6
-            # Защита от None context
             if context and context.args:
                 try:
                     hours = int(context.args[0])
@@ -372,17 +371,32 @@ class NewsTelegramBot:
                 except ValueError:
                     hours = 6
 
-            period_start = now_msk() - timedelta(hours=hours)
+            from zoneinfo import ZoneInfo
 
-            summaries = await self.summary_repo.get_for_period(period_start, now_msk(), "hour")
+            msk_tz = ZoneInfo("Europe/Moscow")
+
+            # Текущее время в МСК
+            now_msk_time = datetime.now(msk_tz)
+            period_start = now_msk_time - timedelta(hours=hours)
+
+            summaries = await self.summary_repo.get_for_period(period_start, now_msk_time, "hour")
 
             if not summaries:
                 await update.message.reply_text(f"📭 Нет суммаризаций за последние {hours} часов.")
                 return
 
             response = f"📊 *Сводка за последние {hours} часов*\n\n"
+
             for s in summaries[-12:]:
-                time_str = s["period_start"].strftime("%H:%M")
+                # Преобразуем period_start в МСК, если он из БД naive
+                period_start_val = s["period_start"]
+                if period_start_val.tzinfo is None:
+                    period_start_val = period_start_val.replace(tzinfo=msk_tz)
+                else:
+                    # Если с часовым поясом, конвертируем в МСК
+                    period_start_val = period_start_val.astimezone(msk_tz)
+
+                time_str = period_start_val.strftime("%H:%M")
                 content = s["content"]
                 if isinstance(content, dict):
                     summary = content.get("summary", "Нет данных")
@@ -547,10 +561,13 @@ class NewsTelegramBot:
                 await message.reply_text(f"📭 Новостей по запросу '{query}' не найдено.")
                 return
 
-            result_text = f"🔍 *Результаты поиска по запросу '{query}':*\n\n"
+            result_text = f"🔍 <b>Результаты поиска по запросу '{query}':</b>\n\n"
 
             for i, article in enumerate(articles[:10], 1):
-                title = safe_markdown_text(article.get("raw_title", "Без заголовка")[:70])
+                title = article.get("raw_title", "Без заголовка")[:70]
+                # Экранируем HTML-символы в заголовке
+                title = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
                 published = article.get("published_at")
                 time_str = (
                     format_for_display(published, include_time=True)
@@ -559,16 +576,16 @@ class NewsTelegramBot:
                 )
                 url = article.get("url", "")
 
-                result_text += f"{i}. *{title}*...\n"
+                result_text += f"{i}. <b>{title}</b>...\n"
                 result_text += f"   🕐 {time_str}\n"
                 if url:
-                    result_text += f"   🔗 {url}\n\n"
+                    result_text += f"   🔗 <a href='{url}'>{url}</a>\n\n"
 
                 if len(result_text) > 3500:
-                    result_text += f"...\n*Показаны первые {i} результатов*"
+                    result_text += f"...\n<b>Показаны первые {i} результатов</b>"
                     break
 
-            await message.reply_text(result_text, parse_mode="Markdown")
+            await message.reply_text(result_text, parse_mode="HTML")
 
         except Exception as e:
             logger.error(f"Ошибка поиска: {e}")
@@ -703,10 +720,28 @@ class NewsTelegramBot:
                 await query.edit_message_text("❌ Нет данных для статистики")
                 return
 
+            # Находим максимальное значение
+            max_count = max(count for _, count in stats[:24]) if stats else 0
+
+            # Максимальная длина бара
+            MAX_BAR_LENGTH = 10
+
             response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
+            response += f"📈 Максимум: {max_count} публикаций\n\n"
+
             for hour, count in stats[:24]:
-                bar = "█" * min(count // 2, 20) if count > 0 else "░"
-                response += f"• {hour:02d}:00 {bar} {count}\n"
+                if max_count > 0:
+                    # Пропорциональная длина бара
+                    bar_length = int((count / max_count) * MAX_BAR_LENGTH)
+                    bar = "█" * bar_length if bar_length > 0 else "░"
+                    # Добавляем пустые символы для выравнивания
+                    bar = bar.ljust(MAX_BAR_LENGTH, "░")
+                else:
+                    bar = "░" * MAX_BAR_LENGTH
+
+                # Форматируем число с разделителями для тысяч
+                formatted_count = f"{count:,}".replace(",", " ")
+                response += f"• {hour:02d}:00 {bar} {formatted_count}\n"
 
             keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_stats")]]
             await query.edit_message_text(
