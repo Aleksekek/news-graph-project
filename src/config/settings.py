@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     DB_USER: str = Field("postgres", env="DB_USER")
     DB_PASSWORD: str = Field("", env="DB_PASSWORD")
 
+    # LLM
+    DEEPSEEK_API_KEY: str = Field("", env="DEEPSEEK_API_KEY")
+
     # Настройки парсеров
     PARSER_REQUEST_DELAY: float = Field(2.0, env="PARSER_REQUEST_DELAY")
     PARSER_MAX_RETRIES: int = Field(3, env="PARSER_MAX_RETRIES")

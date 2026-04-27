@@ -24,6 +24,7 @@ dependencies = [
     "httpx[socks]>=0.25.0",
     "socksio>=1.0.0",
     "psutil>=5.9.0",
+    "openai>=2.32.0",
 ]
 
 [project.optional-dependencies]

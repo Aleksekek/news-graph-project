@@ -23,6 +23,27 @@ services:
     networks:
       - news_network
 
+  summarizer:
+    build: .
+    container_name: news_graph_summarizer
+    env_file:
+      - .env
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - ./logs:/app/logs
+    command: python -m src.infrastructure.scheduling.summarization_runner
+    restart: unless-stopped
+    networks:
+      - news_network
+    depends_on:
+      - scheduler
+
   telegram-bot:
     build: .
     container_name: news_graph_bot
