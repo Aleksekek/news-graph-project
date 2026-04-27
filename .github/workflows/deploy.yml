@@ -142,8 +142,13 @@ jobs:
         run: |
           cd /home/newsapp/news_graph
           
-          docker-compose down
-          docker-compose up -d --build
+          # Останавливаем и удаляем все контейнеры, сети и volumes связанные с проектом
+          docker-compose down -v --remove-orphans || true
+          
+          # Собираем и запускаем заново
+          docker-compose up -d --build --remove-orphans
+          
+          # Очищаем старые образы
           docker image prune -f
           
           echo "✅ Deployment completed"
