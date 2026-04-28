@@ -18,29 +18,41 @@ RSS_DATE_FORMATS = [
 ]
 
 HTML_DATE_FORMATS = [
-    "%Y-%m-%dT%H:%M:%S%z",      # 2026-01-17T19:09:24+0300
-    "%Y-%m-%d %H:%M:%S%z",      # 2026-01-17 19:09:24+0300
-    "%Y-%m-%dT%H:%M:%S",        # 2026-01-17T19:09:24
-    "%Y-%m-%d %H:%M:%S",        # 2026-01-17 19:09:24
-    "%d.%m.%Y %H:%M:%S",        # 17.01.2026 19:09:24
-    "%d/%m/%Y %H:%M:%S",        # 17/01/2026 19:09:24
-    "%Y-%m-%d",                 # 2026-01-17
+    "%Y-%m-%dT%H:%M:%S%z",  # 2026-01-17T19:09:24+0300
+    "%Y-%m-%d %H:%M:%S%z",  # 2026-01-17 19:09:24+0300
+    "%Y-%m-%dT%H:%M:%S",  # 2026-01-17T19:09:24
+    "%Y-%m-%d %H:%M:%S",  # 2026-01-17 19:09:24
+    "%d.%m.%Y %H:%M:%S",  # 17.01.2026 19:09:24
+    "%d/%m/%Y %H:%M:%S",  # 17/01/2026 19:09:24
+    "%Y-%m-%d",  # 2026-01-17
 ]
 
 # Месяцы на русском для Lenta.ru
 RUSSIAN_MONTHS = {
-    "января": 1, "янв": 1,
-    "февраля": 2, "фев": 2,
-    "марта": 3, "мар": 3,
-    "апреля": 4, "апр": 4,
-    "мая": 5, "май": 5,
-    "июня": 6, "июн": 6,
-    "июля": 7, "июл": 7,
-    "августа": 8, "авг": 8,
-    "сентября": 9, "сен": 9,
-    "октября": 10, "окт": 10,
-    "ноября": 11, "ноя": 11,
-    "декабря": 12, "дек": 12,
+    "января": 1,
+    "янв": 1,
+    "февраля": 2,
+    "фев": 2,
+    "марта": 3,
+    "мар": 3,
+    "апреля": 4,
+    "апр": 4,
+    "мая": 5,
+    "май": 5,
+    "июня": 6,
+    "июн": 6,
+    "июля": 7,
+    "июл": 7,
+    "августа": 8,
+    "авг": 8,
+    "сентября": 9,
+    "сен": 9,
+    "октября": 10,
+    "окт": 10,
+    "ноября": 11,
+    "ноя": 11,
+    "декабря": 12,
+    "дек": 12,
 }
 
 
@@ -55,10 +67,10 @@ def now_msk() -> datetime:
 def utc_to_msk(utc_dt: datetime) -> datetime:
     """
     Конвертирует UTC datetime в MSK (naive).
-    
+
     Args:
         utc_dt: datetime с tzinfo=UTC или naive (считаем что UTC)
-    
+
     Returns:
         MSK datetime без tzinfo
     """
@@ -71,10 +83,10 @@ def utc_to_msk(utc_dt: datetime) -> datetime:
 def msk_to_utc(msk_dt: datetime) -> datetime:
     """
     Конвертирует MSK datetime в UTC (aware).
-    
+
     Args:
         msk_dt: naive datetime в MSK
-    
+
     Returns:
         UTC datetime с tzinfo
     """
@@ -88,10 +100,10 @@ def parse_rfc2822_date(date_str: str) -> Optional[datetime]:
     """
     Парсит RFC 2822 дату (RSS формат) в MSK naive.
     RSS всегда в UTC, поэтому конвертируем.
-    
+
     Args:
         date_str: строка с датой из RSS
-    
+
     Returns:
         MSK datetime или None
     """
@@ -109,32 +121,29 @@ def parse_russian_date(date_str: str) -> Optional[datetime]:
     """
     Парсит русскоязычную дату формата Lenta.ru.
     Пример: "19:09, 17 января 2026"
-    
+
     Args:
         date_str: строка с датой на русском
-    
+
     Returns:
         MSK datetime или None
     """
     # Паттерн: "ЧЧ:ММ, ДД МЕСЯЦ ГГГГ"
     pattern = r"(\d{1,2}):(\d{2})\s*,\s*(\d{1,2})\s+([а-яё]+)\s+(\d{4})"
     match = re.search(pattern, date_str, re.IGNORECASE)
-    
+
     if not match:
         return None
-    
+
     hour, minute, day, month_str, year = match.groups()
     month = RUSSIAN_MONTHS.get(month_str.lower())
-    
+
     if not month:
         return None
-    
+
     try:
         # Lenta.ru отдаёт время уже в MSK
-        return datetime(
-            int(year), month, int(day), 
-            int(hour), int(minute)
-        )
+        return datetime(int(year), month, int(day), int(hour), int(minute))
     except ValueError:
         return None
 
@@ -142,11 +151,11 @@ def parse_russian_date(date_str: str) -> Optional[datetime]:
 def parse_html_date(date_str: str, source: str = "unknown") -> Optional[datetime]:
     """
     Парсит дату из HTML страницы.
-    
+
     Args:
         date_str: строка с датой
         source: источник ("lenta", "tinvest", etc.)
-    
+
     Returns:
         MSK datetime или None
     """
@@ -155,12 +164,12 @@ def parse_html_date(date_str: str, source: str = "unknown") -> Optional[datetime
         russian_dt = parse_russian_date(date_str)
         if russian_dt:
             return russian_dt
-    
+
     # Пробуем стандартные форматы
     for fmt in HTML_DATE_FORMATS:
         try:
             dt = datetime.strptime(date_str, fmt)
-            
+
             # Если источник отдаёт в MSK (как Lenta), не конвертируем
             if source == "lenta":
                 # Lenta.ru уже в MSK
@@ -172,7 +181,7 @@ def parse_html_date(date_str: str, source: str = "unknown") -> Optional[datetime
                 return utc_to_msk(dt)
         except ValueError:
             continue
-    
+
     return None
 
 
@@ -191,17 +200,17 @@ def format_for_db(dt: datetime) -> datetime:
 def format_for_display(dt: datetime, include_time: bool = True) -> str:
     """
     Форматирует datetime для отображения пользователю.
-    
+
     Args:
         dt: datetime (должен быть MSK naive)
         include_time: показывать время
-    
+
     Returns:
         Отформатированная строка
     """
     if dt is None:
         return "Дата неизвестна"
-    
+
     if include_time:
         return dt.strftime("%d.%m.%Y %H:%M")
     return dt.strftime("%d.%m.%Y")

@@ -24,17 +24,38 @@ class TestLentaParserReal:
         parser = ParserFactory.create("lenta")
 
         async with parser:
-            result = await parser.parse(limit=3)
+            result = await parser.parse(limit=10)
 
-        assert len(result.items) <= 3
+        assert len(result.items) <= 10
         assert len(result.items) > 0  # Хотя бы одна статья
 
+        now = now_msk()
+        # Смотрим, что статьи не в будущем (ловит сдвиг +3ч)
+        # и не все старше 3 часов (ловит сдвиг -3ч / UTC)
+        fresh_count = 0
         for item in result.items:
             assert item.title is not None
             assert len(item.title) > 5
             assert item.url.startswith("https://lenta.ru")
             assert item.content is not None
             assert len(item.content) > 100
+
+            if item.published_at:
+                # Дата не в будущем (с запасом 5 мин на погрешность)
+                assert item.published_at <= now + timedelta(minutes=5), (
+                    f"published_at {item.published_at} в будущем относительно "
+                    f"now_msk {now}. Возможен сдвиг часового пояса +3ч."
+                )
+                # Считаем свежие (моложе 3 часов)
+                if item.published_at >= now - timedelta(hours=3):
+                    fresh_count += 1
+
+        # Хотя бы половина статей должна быть моложе 3 часов
+        # (иначе все даты сдвинуты в UTC или есть другая проблема)
+        assert fresh_count >= max(1, len(result.items) // 3), (
+            f"Слишком мало свежих статей ({fresh_count}/{len(result.items)}). "
+            f"Возможно время парсится в UTC вместо MSK или RSS не обновляется."
+        )
 
     async def test_parse_with_category_filter(self):
         """Парсинг с фильтром по категории."""
@@ -75,13 +96,15 @@ class TestTInvestParserReal:
 
     async def test_parse_recent_posts(self):
         """Парсинг свежих постов (реальный запрос)."""
-        parser = ParserFactory.create("tinvest", {"tickers": ["SBER", "VTBR"]})
+        parser = ParserFactory.create("tinvest", {"tickers": ["GAZP", "SBER", "VTBR"]})
 
         async with parser:
-            result = await parser.parse(limit=5, tickers=["SBER", "VTBR"])
+            result = await parser.parse(limit=5, tickers=["GAZP", "SBER", "VTBR"])
 
         assert len(result.items) <= 5
 
+        now = now_msk()
+        fresh_count = 0
         for item in result.items:
             assert item.title is not None
             assert item.content is not None
@@ -89,7 +112,27 @@ class TestTInvestParserReal:
             # Должны быть упомянутые тикеры
             mentioned = item.metadata.get("mentioned_tickers", [])
             # Хотя бы один из запрошенных
-            assert any(t in ["SBER", "VTBR"] for t in mentioned) or len(mentioned) > 0
+            assert any(t in ["GAZP", "SBER", "VTBR"] for t in mentioned) or len(mentioned) > 0
+
+            if item.published_at:
+                # Дата не в будущем (с запасом 5 мин на погрешность)
+                assert item.published_at <= now + timedelta(minutes=5), (
+                    f"published_at {item.published_at} в будущем относительно "
+                    f"now_msk {now}. Возможен сдвиг часового пояса +3ч."
+                )
+                # Считаем свежие (моложе 3 часов)
+                if item.published_at >= now - timedelta(hours=3):
+                    fresh_count += 1
+
+        # Если статьи есть, хотя бы одна должна быть свежей (моложе 3 часов).
+        # Для TInvest активность ночью может быть низкой,
+        # поэтому проверяем только если вообще есть посты с published_at.
+        if len(result.items) > 0:
+            assert fresh_count >= 1, (
+                f"Все {len(result.items)} постов старше 3 часов ({fresh_count} свежих). "
+                f"Возможно время парсится в UTC вместо MSK."
+                f"{result.items}"
+            )
 
     async def test_parse_with_min_reactions(self):
         """Парсинг с фильтром по реакциям."""

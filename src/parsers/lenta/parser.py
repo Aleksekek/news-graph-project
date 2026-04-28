@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 from src.core.exceptions import ParserError
 from src.core.models import ParsedItem
 from src.parsers.base import BaseParser, ParserConfig, ParseResult
-from src.utils.datetime_utils import parse_html_date
+from src.utils.datetime_utils import parse_html_date, parse_rfc2822_date
 from src.utils.logging import log_async_execution_time
 
 
@@ -163,15 +163,10 @@ class LentaParser(BaseParser):
                     if not any(cat.lower() in category.lower() for cat in categories):
                         continue
 
-                # Парсим дату (RSS уже в MSK, не конвертируем)
+                # Парсим дату из оригинальной строки RSS через parse_rfc2822_date
                 published_at = None
-                if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    # feedparser возвращает struct_time в локальном времени (уже MSK)
-                    import time
-                    from datetime import datetime
-
-                    # Создаем naive datetime из struct_time
-                    published_at = datetime.fromtimestamp(time.mktime(entry.published_parsed))
+                if hasattr(entry, "published") and entry.published:
+                    published_at = parse_rfc2822_date(entry.published)
 
                 items.append(
                     {

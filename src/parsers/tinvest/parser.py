@@ -326,21 +326,20 @@ class TInvestParser(BaseParser):
         return owner.get("nickname", "") or owner.get("name", "") or "Аноним"
 
     def _extract_date(self, post: Dict[str, Any]) -> Optional[datetime]:
-        """Извлечение даты из поста (API возвращает в MSK, без timezone)."""
+        """Извлечение даты из поста (API возвращает в UTC с суффиксом Z)."""
         try:
             inserted = post.get("inserted", "")
             if not inserted:
                 return None
 
-            # Убираем Z если есть и парсим
-            clean_date = inserted.replace("Z", "")
+            # API tpulse возвращает время в UTC с суффиксом Z
+            # Например: 2026-04-28T21:28:25.102Z
+            # Заменяем Z на +00:00 для корректного парсинга aware datetime
+            clean_date = inserted.replace("Z", "+00:00")
             dt = datetime.fromisoformat(clean_date)
 
-            # Если всё же получили aware datetime, делаем naive
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-
-            return dt
+            # Конвертируем UTC в MSK (naive)
+            return utc_to_msk(dt)
 
         except Exception as e:
             self.logger.debug(f"Ошибка парсинга даты: {e}")

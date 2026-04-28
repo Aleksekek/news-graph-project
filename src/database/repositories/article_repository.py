@@ -221,6 +221,60 @@ class ArticleRepository:
             logger.error(f"Ошибка получения дневной статистики: {e}")
             return []
 
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def get_hourly_stats_24h(self) -> List[tuple]:
+        """
+        Получает почасовую статистику за последние 24 часа (плавающее окно).
+        Возвращает часы с датами в MSK.
+
+        Returns:
+            Список кортежей: (datetime начала часа в MSK, количество статей)
+            datetime уже в MSK и округлён до начала часа
+        """
+        try:
+            async with DatabasePoolManager.connection() as conn:
+                # Текущее время в MSK (naive)
+                now = now_msk()
+                # 24 часа назад
+                cutoff = now - timedelta(hours=24)
+
+                # Запрос с группировкой по часам с учётом даты
+                rows = await conn.fetch(
+                    """
+                    SELECT 
+                        DATE_TRUNC('hour', published_at) as hour_start,
+                        COUNT(*) as count
+                    FROM raw_articles
+                    WHERE published_at >= $1 
+                        AND published_at <= $2
+                        AND status != 'failed'
+                    GROUP BY DATE_TRUNC('hour', published_at)
+                    ORDER BY hour_start ASC
+                    """,
+                    cutoff,
+                    now,
+                )
+
+                # Преобразуем результат в список кортежей (datetime, count)
+                # published_at уже в БД в MSK, так что никаких конвертаций не нужно
+                result = [(row["hour_start"], row["count"]) for row in rows]
+
+                # Создаём полную сетку из 24 часов (включая часы без статей)
+                full_result = []
+                for i in range(24):
+                    hour_start = cutoff + timedelta(hours=i)
+                    hour_start = hour_start.replace(minute=0, second=0, microsecond=0)
+
+                    # Ищем есть ли данные для этого часа
+                    count = next((c for dt, c in result if dt == hour_start), 0)
+                    full_result.append((hour_start, count))
+
+                return full_result
+
+        except Exception as e:
+            logger.error(f"Ошибка получения почасовой статистики: {e}")
+            return []
+
     @staticmethod
     def _prepare_json(value: Any) -> Any:
         """Подготовка JSON поля для asyncpg."""
