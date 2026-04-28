@@ -41,15 +41,15 @@ class ScheduleConfig:
         default_tasks = {
             "lenta_hourly": TaskConfig(
                 name="Часовой парсинг Lenta.ru",
-                cron="15,45 * * * *",
+                cron="10,30,50 * * * *",
                 enabled=True,
-                kwargs={"limit": 50, "categories": LENTA_CATEGORIES},
+                kwargs={"limit": 30, "categories": LENTA_CATEGORIES},
             ),
             "tinvest_hourly": TaskConfig(
                 name="Часовой парсинг TInvest",
-                cron="0,30 * * * *",
+                cron="0,20,40 * * * *",
                 enabled=True,
-                kwargs={"limit": 50, "tickers": TINVEST_TICKERS},
+                kwargs={"limit": 30, "tickers": TINVEST_TICKERS},
             ),
         }
 
