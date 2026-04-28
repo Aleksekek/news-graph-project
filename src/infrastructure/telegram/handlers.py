@@ -177,29 +177,32 @@ class Handlers:
 
     # ==================== СТАТИСТИКА ====================
 
+    async def _build_stats_text(self) -> str:
+        """Формирует текст статистики."""
+        stats = await self.article_repo.get_stats()
+        sources_stats = await self.article_repo.get_sources_stats()
+
+        total = stats.get("total", 0)
+        raw = stats.get("raw", 0)
+        processed = stats.get("processed", 0)
+
+        stats_text = f"📊 *Статистика*\n\n"
+        stats_text += f"• Всего новостей: *{total}*\n"
+        stats_text += f"• Необработано: {raw}\n"
+        stats_text += f"• Обработано: {processed}\n\n"
+
+        stats_text += "📰 *По источникам:*\n"
+        for source_name, count in sources_stats[:5]:
+            stats_text += f"• {source_name}: *{count}*\n"
+
+        stats_text += f"\n👥 *Подписчиков:* {len(self.subscribers)}"
+        return stats_text
+
     async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /stats."""
         try:
-            stats = await self.article_repo.get_stats()
-            sources_stats = await self.article_repo.get_sources_stats()
-
-            total = stats.get("total", 0)
-            raw = stats.get("raw", 0)
-            processed = stats.get("processed", 0)
-
-            stats_text = f"📊 *Статистика*\n\n"
-            stats_text += f"• Всего новостей: *{total}*\n"
-            stats_text += f"• Необработано: {raw}\n"
-            stats_text += f"• Обработано: {processed}\n\n"
-
-            stats_text += "📰 *По источникам:*\n"
-            for source_name, count in sources_stats[:5]:
-                stats_text += f"• {source_name}: *{count}*\n"
-
-            stats_text += f"\n👥 *Подписчиков:* {len(self.subscribers)}"
-
+            stats_text = await self._build_stats_text()
             await update.message.reply_text(stats_text, parse_mode="Markdown")
-
         except Exception as e:
             logger.error(f"Ошибка stats_command: {e}")
             await update.message.reply_text("❌ Ошибка получения статистики")
@@ -208,7 +211,18 @@ class Handlers:
         """Общая статистика из меню."""
         query = update.callback_query
         await query.edit_message_text("📊 Собираю статистику...")
-        await self.stats_command(update, context)
+
+        try:
+            stats_text = await self._build_stats_text()
+            await query.edit_message_text(
+                stats_text,
+                reply_markup=get_back_button("menu_stats"),
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            logger.error(f"Ошибка stats_overall: {e}")
+            await query.edit_message_text("❌ Ошибка получения статистики")
+
         await query.answer()
 
     async def stats_hourly(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,7 +234,6 @@ class Handlers:
             # Получаем плавающую статистику за последние 24 часа
             hourly_stats = await get_hourly_stats(self.article_repo)
             response = format_hourly_stats(hourly_stats)
-
             await query.edit_message_text(
                 response,
                 reply_markup=get_back_button("menu_stats"),
@@ -234,7 +247,6 @@ class Handlers:
         await query.answer()
 
     # ==================== ПОДПИСКА ====================
-
     async def show_subscribe_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Меню подписки."""
         query = update.callback_query

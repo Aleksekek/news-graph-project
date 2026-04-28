@@ -6,7 +6,7 @@
 import json
 
 from src.core.models import ArticleForDB, ParsedItem
-from src.utils.datetime_utils import format_for_db
+from src.utils.datetime_utils import naive_msk_dt
 
 
 class LentaConverter:
@@ -28,7 +28,7 @@ class LentaConverter:
             raw_title=self._prepare_title(item.title),
             raw_text=self._prepare_text(item.content),
             raw_html=item.raw_data.get("html") if item.raw_data else None,
-            published_at=(format_for_db(item.published_at) if item.published_at else None),
+            published_at=(naive_msk_dt(item.published_at) if item.published_at else None),
             author=item.author,
             language="ru",
             meta_info=meta_info,

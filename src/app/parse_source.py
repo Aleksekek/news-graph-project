@@ -10,7 +10,7 @@ from src.core.models import ProcessingStats
 from src.database.repositories.article_repository import ArticleRepository
 from src.parsers.converter_factory import ConverterFactory
 from src.parsers.factory import ParserFactory
-from src.utils.datetime_utils import format_for_db
+from src.utils.datetime_utils import naive_msk_dt
 from src.utils.logging import get_logger, log_async_execution_time
 
 logger = get_logger("use_cases.parse_source")
@@ -54,8 +54,8 @@ class ParseSourceUseCase:
         async with parser:
             if start_date and end_date:
                 # Приводим даты к MSK naive
-                start = format_for_db(start_date)
-                end = format_for_db(end_date)
+                start = naive_msk_dt(start_date)
+                end = naive_msk_dt(end_date)
                 result = await parser.parse_period(start, end, limit, **filters)
             else:
                 result = await parser.parse(limit, **filters)

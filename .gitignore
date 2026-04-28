@@ -47,6 +47,7 @@ wheels/
 *.egg
 .pytest_cache
 .coverage
+coverage.xml
 htmlcov
 
 # Virtual Environment

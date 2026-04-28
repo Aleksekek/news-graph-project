@@ -7,7 +7,7 @@ import json
 from typing import Optional
 
 from src.core.models import ArticleForDB, ParsedItem
-from src.utils.datetime_utils import format_for_db
+from src.utils.datetime_utils import naive_msk_dt
 
 
 class TInvestConverter:
@@ -22,9 +22,7 @@ class TInvestConverter:
             raw_title=self._prepare_title(item.title),
             raw_text=self._prepare_text(item.content),
             raw_html=None,  # У TP нет HTML
-            published_at=(
-                format_for_db(item.published_at) if item.published_at else None
-            ),
+            published_at=(naive_msk_dt(item.published_at) if item.published_at else None),
             author=item.author,
             language="ru",
             media_content=self._prepare_media(item.metadata.get("images", [])),

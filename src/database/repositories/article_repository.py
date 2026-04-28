@@ -143,8 +143,7 @@ class ArticleRepository:
     async def get_stats(self) -> Dict[str, Any]:
         """Общая статистика по статьям."""
         async with DatabasePoolManager.connection() as conn:
-            row = await conn.fetchrow(
-                """
+            row = await conn.fetchrow("""
                 SELECT 
                     COUNT(*) as total,
                     COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw,
@@ -153,8 +152,7 @@ class ArticleRepository:
                     MIN(published_at) as oldest,
                     MAX(published_at) as newest
                 FROM raw_articles
-                """
-            )
+                """)
             return dict(row) if row else {}
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
@@ -178,15 +176,13 @@ class ArticleRepository:
         """Получить статистику по источникам."""
         try:
             async with DatabasePoolManager.connection() as conn:
-                rows = await conn.fetch(
-                    """
+                rows = await conn.fetch("""
                     SELECT s.name, COUNT(r.id) as count
                     FROM sources s
                     LEFT JOIN raw_articles r ON s.id = r.source_id
                     GROUP BY s.id, s.name
                     ORDER BY count DESC
-                """
-                )
+                """)
                 return [(row["name"], row["count"]) for row in rows]
         except Exception as e:
             logger.error(f"Ошибка получения статистики по источникам: {e}")

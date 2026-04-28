@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from src.utils.datetime_utils import (
-    format_for_db,
+    naive_msk_dt,
     format_for_display,
     msk_to_utc,
     now_msk,
@@ -42,10 +42,10 @@ class TestDateTimeUtilsExtended:
 
         assert original == back
 
-    def test_format_for_db_with_timezone(self):
-        """format_for_db убирает timezone."""
+    def test_naive_msk_dt_with_timezone(self):
+        """naive_msk_dt убирает timezone."""
         dt_with_tz = datetime(2026, 1, 17, 19, 9, tzinfo=timezone(timedelta(hours=3)))
-        result = format_for_db(dt_with_tz)
+        result = naive_msk_dt(dt_with_tz)
 
         assert result.tzinfo is None
         assert result.hour == 19

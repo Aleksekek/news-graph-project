@@ -12,7 +12,7 @@ import aiohttp
 
 from src.core.exceptions import ParserError, ValidationError
 from src.core.models import ParsedItem, ParserConfig
-from src.utils.datetime_utils import format_for_db
+from src.utils.datetime_utils import naive_msk_dt
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
