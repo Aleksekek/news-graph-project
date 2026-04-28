@@ -6,7 +6,7 @@
 import asyncio
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 import feedparser
 from bs4 import BeautifulSoup
@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 from src.core.exceptions import ParserError
 from src.core.models import ParsedItem
 from src.parsers.base import BaseParser, ParserConfig, ParseResult
-from src.utils.datetime_utils import parse_html_date, parse_rfc2822_date
+from src.utils.datetime_utils import parse_html_date
 from src.utils.logging import log_async_execution_time
 
 
@@ -85,9 +85,7 @@ class LentaParser(BaseParser):
         max_pages_per_day = filters.get("max_pages_per_day", 5)
         min_length = filters.get("min_length", 100)
 
-        self.logger.info(
-            f"Архивный парсинг Lenta: {start_date.date()} - {end_date.date()}"
-        )
+        self.logger.info(f"Архивный парсинг Lenta: {start_date.date()} - {end_date.date()}")
 
         all_articles = []
         current_date = start_date
@@ -165,16 +163,15 @@ class LentaParser(BaseParser):
                     if not any(cat.lower() in category.lower() for cat in categories):
                         continue
 
-                # Парсим дату (RSS в UTC, конвертируем в MSK)
+                # Парсим дату (RSS уже в MSK, не конвертируем)
                 published_at = None
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    # feedparser возвращает struct_time в локальном времени (уже MSK)
                     import time
+                    from datetime import datetime
 
-                    timestamp = time.mktime(entry.published_parsed)
-                    from datetime import timezone
-
-                    utc_dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-                    published_at = self._to_msk(utc_dt)
+                    # Создаем naive datetime из struct_time
+                    published_at = datetime.fromtimestamp(time.mktime(entry.published_parsed))
 
                 items.append(
                     {
@@ -570,9 +567,3 @@ class LentaParser(BaseParser):
                 continue
 
         return ""
-
-    def _to_msk(self, utc_dt: datetime) -> datetime:
-        """Конвертация UTC в MSK naive."""
-        from src.utils.datetime_utils import utc_to_msk
-
-        return utc_to_msk(utc_dt)
