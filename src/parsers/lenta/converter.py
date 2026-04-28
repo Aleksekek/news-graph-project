@@ -4,7 +4,6 @@
 """
 
 import json
-from typing import Any, Dict
 
 from src.core.models import ArticleForDB, ParsedItem
 from src.utils.datetime_utils import format_for_db
@@ -35,3 +34,25 @@ class LentaConverter:
             meta_info=meta_info,
             status="raw",
         )
+
+    def _prepare_title(self, title: str, max_length: int = 500) -> str:
+        """Подготовка заголовка."""
+        if not title:
+            return "Без заголовка"
+
+        cleaned = title.strip()
+        if len(cleaned) > max_length:
+            cleaned = cleaned[:max_length] + "..."
+
+        return cleaned
+
+    def _prepare_text(self, text: str, max_length: int = 10000) -> str:
+        """Подготовка текста."""
+        if not text:
+            return ""
+
+        cleaned = text.strip()
+        if len(cleaned) > max_length:
+            cleaned = cleaned[:max_length] + "... [TRUNCATED]"
+
+        return cleaned
