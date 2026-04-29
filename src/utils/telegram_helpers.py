@@ -19,12 +19,7 @@ def escape_markdown(text: str, version: int = 2) -> str:
     if not text:
         return ""
 
-    if version == 1:
-        # MarkdownV1: _ * [ ] ( ) ~ ` > # + - = | { } . !
-        special_chars = r"_*[]()~`>#+-=|{}.!"
-    else:
-        # MarkdownV2: _ * [ ] ( ) ~ ` > # + - = | { } . ! \\
-        special_chars = r"_*[]()~`>#+-=|{}.!\\"
+    special_chars = r"_*[]()~`>#+-=|{}.!" if version == 1 else r"_*[]()~`>#+-=|{}.!\\"
 
     return re.sub(f"([{re.escape(special_chars)}])", r"\\\1", text)
 

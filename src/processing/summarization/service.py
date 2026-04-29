@@ -71,7 +71,7 @@ class SummarizationService:
             **meta,
             "cost_usd": round(cost, 6),
             "articles_count": len(articles),
-            "sources_count": len(set(a.get("source_name") for a in articles)),
+            "sources_count": len({a.get("source_name") for a in articles}),
         }
 
         # Сохраняем в БД
@@ -122,11 +122,11 @@ class SummarizationService:
                 )
 
         if not summaries_text:
-            logger.warning(f"Нет данных в часовых суммаризациях")
+            logger.warning("Нет данных в часовых суммаризациях")
             return None
 
         # Формируем промпт для дневной суммаризации
-        prompt = f"""
+        prompt = """
 Ты — аналитик новостного агрегатора. Проанализируй сводки за {day_start.strftime('%d.%m.%Y')}.
 
 ЧАСОВЫЕ СВОДКИ:

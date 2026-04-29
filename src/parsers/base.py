@@ -10,9 +10,8 @@ from typing import Any
 
 import aiohttp
 
-from src.core.exceptions import ParserError, ValidationError
+from src.core.exceptions import ParserError
 from src.core.models import ParsedItem, ParserConfig
-from src.utils.datetime_utils import naive_msk_dt
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -172,9 +171,9 @@ class BaseParser(ABC):
             elif e.status == 429:
                 self.logger.warning(f"Rate limit для {url}, пауза 30 сек")
                 await asyncio.sleep(30)
-            raise ParserError(f"HTTP {e.status} для {url}: {e}")
+            raise ParserError(f"HTTP {e.status} для {url}: {e}") from e
         except Exception as e:
-            raise ParserError(f"Ошибка загрузки {url}: {e}")
+            raise ParserError(f"Ошибка загрузки {url}: {e}") from e
 
     async def _fetch_json(self, url: str, **kwargs) -> dict[str, Any]:
         """Загрузка JSON данных."""
@@ -185,7 +184,7 @@ class BaseParser(ABC):
 
             return json.loads(text)
         except json.JSONDecodeError as e:
-            raise ParserError(f"Ошибка парсинга JSON из {url}: {e}")
+            raise ParserError(f"Ошибка парсинга JSON из {url}: {e}") from e
 
     async def _delay(self):
         """Задержка между запросами для избежания rate limiting."""

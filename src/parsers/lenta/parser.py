@@ -159,9 +159,8 @@ class LentaParser(BaseParser):
                     category = entry.tags[0].term if entry.tags else ""
 
                 # Фильтр по категориям
-                if categories and category:
-                    if not any(cat.lower() in category.lower() for cat in categories):
-                        continue
+                if categories and category and not any(cat.lower() in category.lower() for cat in categories):
+                    continue
 
                 # Парсим дату из оригинальной строки RSS через parse_rfc2822_date
                 published_at = None
@@ -184,7 +183,7 @@ class LentaParser(BaseParser):
             return items
 
         except Exception as e:
-            raise ParserError(f"Ошибка загрузки RSS: {e}")
+            raise ParserError(f"Ошибка загрузки RSS: {e}") from e
 
     async def _fetch_articles_parallel(
         self, rss_items: list[dict], min_length: int
@@ -323,10 +322,7 @@ class LentaParser(BaseParser):
         all_urls = []
 
         for page in range(1, max_pages + 1):
-            if page == 1:
-                page_url = archive_url
-            else:
-                page_url = archive_url.rstrip("/") + f"/page/{page}/"
+            page_url = archive_url if page == 1 else archive_url.rstrip("/") + f"/page/{page}/"
 
             try:
                 html = await self._fetch_url(page_url)
@@ -401,7 +397,7 @@ class LentaParser(BaseParser):
                     elem = soup.select_one(selector)
                     if elem and elem.get_text(strip=True):
                         return elem.get_text(strip=True)
-            except:
+            except Exception:
                 continue
 
         return "Без заголовка"
@@ -435,7 +431,7 @@ class LentaParser(BaseParser):
                     full_text = container.get_text(separator="\n", strip=True)
                     if len(full_text) > 100:
                         return full_text
-            except:
+            except Exception:
                 continue
 
         return ""
@@ -460,7 +456,7 @@ class LentaParser(BaseParser):
                         text = elem.get_text(strip=True)
                         if text and len(text) > 2:
                             return text
-            except:
+            except Exception:
                 continue
 
         return None
@@ -480,7 +476,7 @@ class LentaParser(BaseParser):
                     dt = parse_html_date(elem["content"], source="lenta")
                     if dt:
                         return dt
-            except:
+            except Exception:
                 continue
 
         # Элементы времени на странице
@@ -508,7 +504,7 @@ class LentaParser(BaseParser):
                         dt = parse_html_date(text, source="lenta")
                         if dt:
                             return dt
-            except:
+            except Exception:
                 continue
 
         return None
@@ -533,7 +529,7 @@ class LentaParser(BaseParser):
                         text = elem.get_text(strip=True)
                         if text:
                             return text
-            except:
+            except Exception:
                 continue
 
         return ""
@@ -558,7 +554,7 @@ class LentaParser(BaseParser):
                         text = elem.get_text(strip=True)
                         if text:
                             return text
-            except:
+            except Exception:
                 continue
 
         return ""

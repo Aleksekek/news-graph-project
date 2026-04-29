@@ -3,17 +3,14 @@
 """
 
 import logging
-from datetime import datetime, timedelta
 
-from telegram import InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from src.database.repositories.article_repository import ArticleRepository
 from src.database.repositories.summary_repository import SummaryRepository
 from src.processing.llm.deepseek import DeepSeekAnalyzer
 from src.processing.summarization.formatter import SummaryFormatter
-from src.utils.datetime_utils import format_for_display, now_msk
-from src.utils.telegram_helpers import escape_markdown
 
 from .menus import (
     get_back_button,
@@ -55,7 +52,7 @@ class Handlers:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню."""
         user = update.effective_user
-        welcome_text = f"""
+        welcome_text = """
 👋 Привет, {user.first_name}!
 
 Я — новостной бот News Graph Project.
@@ -186,7 +183,7 @@ class Handlers:
         raw = stats.get("raw", 0)
         processed = stats.get("processed", 0)
 
-        stats_text = f"📊 *Статистика*\n\n"
+        stats_text = "📊 *Статистика*\n\n"
         stats_text += f"• Всего новостей: *{total}*\n"
         stats_text += f"• Необработано: {raw}\n"
         stats_text += f"• Обработано: {processed}\n\n"
@@ -234,7 +231,7 @@ class Handlers:
             logger.info("stats_hourly: вызываю get_hourly_stats")
             hourly_stats = await get_hourly_stats(self.article_repo)
             logger.info(f"stats_hourly: получил {len(hourly_stats)} записей")
-            
+
             if not hourly_stats:
                 logger.warning("stats_hourly: hourly_stats is empty")
                 await query.edit_message_text(
@@ -243,11 +240,11 @@ class Handlers:
                 )
                 await query.answer()
                 return
-                
-            logger.info(f"stats_hourly: формирую ответ")
+
+            logger.info("stats_hourly: формирую ответ")
             response = format_hourly_stats(hourly_stats)
             logger.info(f"stats_hourly: ответ сформирован, длина={len(response)}")
-            
+
             await query.edit_message_text(
                 response,
                 reply_markup=get_back_button("menu_stats"),

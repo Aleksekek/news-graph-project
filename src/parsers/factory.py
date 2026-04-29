@@ -85,7 +85,7 @@ class ParserFactory:
             parser_class = cls._parsers_registry[source_name]
             return parser_class(config)
         except Exception as e:
-            raise ConfigurationError(f"Ошибка создания парсера: {e}")
+            raise ConfigurationError(f"Ошибка создания парсера: {e}") from e
 
     @classmethod
     def register_parser(
@@ -96,7 +96,7 @@ class ParserFactory:
     ):
         """Регистрация нового парсера."""
         if not issubclass(parser_class, BaseParser):
-            raise TypeError(f"Парсер должен наследоваться от BaseParser")
+            raise TypeError("Парсер должен наследоваться от BaseParser")
 
         cls._parsers_registry[source_name] = parser_class
         if default_config:

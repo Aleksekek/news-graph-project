@@ -3,14 +3,14 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from src.database.repositories.summary_repository import SummaryRepository
-from src.utils.datetime_utils import now_msk_aware, msk_naive_to_aware
+from src.utils.datetime_utils import now_msk_aware
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,6 @@ class BriefHandlers:
             response = f"📊 *Сводка за последние {hours} часов*\n\n"
 
             for s in summaries[-12:]:
-                period_start_val = s["period_start"]
                 period_end_val = s["period_end"]
 
                 # Убеждаемся, что время в MSK для отображения
@@ -139,7 +138,7 @@ class BriefHandlers:
                 # Форматируем дату в MSK для отображения
                 yesterday_msk = yesterday.astimezone(MSK_TZ)
                 response = f"📅 *Сводка за {yesterday_msk.strftime('%d.%m.%Y')}*\n\n"
-                response += f"📌 *Главные темы:*\n"
+                response += "📌 *Главные темы:*\n"
                 for topic in content.get("topics", [])[:5]:
                     response += f"• {topic}\n"
                 response += f"\n📝 *Суть дня:*\n{content.get('summary', 'Нет данных')}\n"

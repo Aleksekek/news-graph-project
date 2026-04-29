@@ -6,7 +6,6 @@ import logging
 from datetime import datetime
 
 from src.database.repositories.article_repository import ArticleRepository
-from src.utils.datetime_utils import format_for_display, now_msk
 
 logger = logging.getLogger(__name__)
 

@@ -6,9 +6,9 @@ import functools
 import logging
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from src.config.settings import settings
 

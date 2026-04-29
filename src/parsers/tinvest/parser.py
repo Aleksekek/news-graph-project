@@ -5,7 +5,7 @@
 
 import asyncio
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 
 from tpulse import TinkoffPulse
@@ -13,7 +13,7 @@ from tpulse import TinkoffPulse
 from src.core.exceptions import ParserError
 from src.core.models import ParsedItem
 from src.parsers.base import BaseParser, ParserConfig, ParseResult
-from src.utils.datetime_utils import now_msk, utc_to_msk
+from src.utils.datetime_utils import utc_to_msk
 from src.utils.logging import log_async_execution_time
 
 
@@ -397,19 +397,16 @@ class TInvestParser(BaseParser):
     def _apply_filters(self, item: ParsedItem, filters: dict[str, Any]) -> bool:
         """Применение фильтров к посту."""
         # Минимальное количество реакций
-        if "min_reactions" in filters:
-            if item.metadata.get("total_reactions", 0) < filters["min_reactions"]:
-                return False
+        if "min_reactions" in filters and item.metadata.get("total_reactions", 0) < filters["min_reactions"]:
+            return False
 
         # Только с картинками
-        if filters.get("has_images", False):
-            if not item.metadata.get("has_images", False):
-                return False
+        if filters.get("has_images", False) and not item.metadata.get("has_images", False):
+            return False
 
         # Фильтр по автору
-        if "author" in filters:
-            if item.author != filters["author"]:
-                return False
+        if "author" in filters and item.author != filters["author"]:
+            return False
 
         return True
 
@@ -427,7 +424,4 @@ class TInvestParser(BaseParser):
 
         # Хотя бы один тикер
         mentioned = item.metadata.get("mentioned_tickers", [])
-        if not mentioned:
-            return False
-
-        return True
+        return bool(mentioned)
