@@ -398,7 +398,7 @@ class TInvestParser(BaseParser):
         fails_min_reactions = "min_reactions" in filters and item.metadata.get("total_reactions", 0) < filters["min_reactions"]
         fails_has_images = filters.get("has_images", False) and not item.metadata.get("has_images", False)
         fails_author = "author" in filters and item.author != filters["author"]
-        
+
         # Возвращаем True только если ни одно условие не провалено
         return not (fails_min_reactions or fails_has_images or fails_author)
 

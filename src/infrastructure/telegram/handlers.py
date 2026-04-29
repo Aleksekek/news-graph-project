@@ -51,7 +51,6 @@ class Handlers:
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню."""
-        user = update.effective_user
         welcome_text = """
 👋 Привет, {user.first_name}!
 
