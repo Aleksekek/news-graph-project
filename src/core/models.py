@@ -72,6 +72,40 @@ class ProcessingStats(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ExtractedEntity(BaseModel):
+    """Сущность, извлечённая NER-моделью из текста статьи."""
+
+    original_name: str
+    normalized_name: str
+    entity_type: str  # 'person', 'organization', 'location'
+    count: int = 1
+    importance_score: float = 0.3
+    context_snippet: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NERStats(BaseModel):
+    """Статистика одного NER-прогона."""
+
+    total_articles: int = 0
+    processed: int = 0
+    failed: int = 0
+    total_entities: int = 0
+    new_entities: int = 0
+
+    def add(self, other: "NERStats") -> "NERStats":
+        return NERStats(
+            total_articles=self.total_articles + other.total_articles,
+            processed=self.processed + other.processed,
+            failed=self.failed + other.failed,
+            total_entities=self.total_entities + other.total_entities,
+            new_entities=self.new_entities + other.new_entities,
+        )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ParserConfig(BaseModel):
     """
     Конфигурация парсера.

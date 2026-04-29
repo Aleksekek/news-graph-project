@@ -1,5 +1,4 @@
-import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import ConfigDict, Field, field_validator
@@ -31,9 +30,9 @@ class Settings(BaseSettings):
     LOG_DIR: str = Field(default="logs", alias="LOG_DIR")
 
     # Telegram
-    TELEGRAM_BOT_TOKEN: Optional[str] = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
-    ADMIN_CHAT_ID: Optional[str] = Field(default=None, alias="ADMIN_CHAT_ID")
-    PROXY_URL: Optional[str] = Field(default=None, alias="PROXY_URL")
+    TELEGRAM_BOT_TOKEN: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    ADMIN_CHAT_ID: str | None = Field(default=None, alias="ADMIN_CHAT_ID")
+    PROXY_URL: str | None = Field(default=None, alias="PROXY_URL")
 
     # Время
     TIMEZONE: str = Field(default="Europe/Moscow", alias="TIMEZONE")
@@ -84,7 +83,7 @@ class Settings(BaseSettings):
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
-    def database_dict(self) -> Dict[str, Any]:
+    def database_dict(self) -> dict[str, Any]:
         """Параметры для psycopg2 (если нужно)"""
         return {
             "host": self.DB_HOST,

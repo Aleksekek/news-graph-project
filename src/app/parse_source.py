@@ -4,7 +4,6 @@ Use case для парсинга источника.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from src.core.models import ProcessingStats
 from src.database.repositories.article_repository import ArticleRepository
@@ -27,8 +26,8 @@ class ParseSourceUseCase:
         self,
         source_name: str,
         limit: int = 100,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         **filters,
     ) -> ProcessingStats:
         """

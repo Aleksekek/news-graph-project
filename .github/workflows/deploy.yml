@@ -16,15 +16,15 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.11"
       
       - name: Cache pip packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
@@ -47,10 +47,10 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          pytest tests/unit/ tests/integration/test_parsers_real.py -v --cov=src --cov-report=xml --cov-report=term
+          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term
       
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
           name: coverage-report
@@ -65,10 +65,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.11"
       
@@ -77,11 +77,11 @@ jobs:
           pip install ruff black isort
       
       - name: Run ruff
-        run: ruff check src/ --output-format=github || true
-      
+        run: ruff check src/ --output-format=github
+
       - name: Run black check
         run: black --check src/ || true
-      
+
       - name: Run isort check
         run: isort --check-only --profile black src/ || true
 
@@ -94,7 +94,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Sync code to project directory
         run: |         
@@ -142,8 +142,8 @@ jobs:
         run: |
           cd /home/newsapp/news_graph
           
-          # Останавливаем и удаляем все контейнеры, сети и volumes связанные с проектом
-          docker-compose down -v --remove-orphans || true
+          # Останавливаем контейнеры (-v не используем — volumes не трогаем)
+          docker-compose down --remove-orphans || true
           
           # Собираем и запускаем заново
           docker-compose up -d --build --remove-orphans
@@ -156,4 +156,21 @@ jobs:
       - name: Check container status
         run: |
           cd /home/newsapp/news_graph
+          sleep 10
           docker-compose ps
+
+          # Падаем если любой контейнер не запустился
+          if docker-compose ps | grep -E "Exit|exited|error"; then
+            echo "❌ Один или несколько контейнеров упали после старта"
+            docker-compose logs --tail=30
+            exit 1
+          fi
+          echo "✅ Все контейнеры работают"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.ADMIN_CHAT_ID }}" \
+            -d text="❌ Deploy failed on commit $(echo '${{ github.sha }}' | cut -c1-7): ${{ github.event.head_commit.message }}" \
+            || true

@@ -28,6 +28,19 @@ services:
     networks:
       - news_network
 
+  ner:
+    build:
+      context: .
+      dockerfile: services/ner/Dockerfile
+    container_name: news_graph_ner
+    volumes:
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - news_network
+
   bot:
     build:
       context: .

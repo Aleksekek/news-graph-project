@@ -5,7 +5,7 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -25,7 +25,7 @@ class TaskConfig:
 class ScheduleConfig:
     """Конфигурация расписания задач."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         if config_path is None:
             # Ищем в config/schedule_config.yaml относительно корня
             base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -70,7 +70,7 @@ class ScheduleConfig:
         # Пробуем загрузить из YAML
         if os.path.exists(self.config_path):
             try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
+                with open(self.config_path, encoding="utf-8") as f:
                     yaml_config = yaml.safe_load(f) or {}
 
                 for task_id, task_data in yaml_config.items():

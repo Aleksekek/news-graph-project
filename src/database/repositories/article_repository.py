@@ -140,6 +140,15 @@ class ArticleRepository:
             return result == "UPDATE 1"
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
+    async def update_status(self, article_id: int, status: str) -> bool:
+        """Обновляет статус статьи."""
+        async with DatabasePoolManager.connection() as conn:
+            result = await conn.execute(
+                "UPDATE raw_articles SET status = $1 WHERE id = $2", status, article_id
+            )
+            return result == "UPDATE 1"
+
+    @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_stats(self) -> Dict[str, Any]:
         """Общая статистика по статьям."""
         async with DatabasePoolManager.connection() as conn:
