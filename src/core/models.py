@@ -4,7 +4,7 @@ Pydantic модели данных проекта.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,10 +21,10 @@ class ParsedItem(BaseModel):
     url: str
     title: str
     content: str
-    published_at: Optional[datetime] = None
-    author: Optional[str] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    raw_data: Dict[str, Any] = Field(default_factory=dict)
+    published_at: datetime | None = None
+    author: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    raw_data: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,13 +39,13 @@ class ArticleForDB(BaseModel):
     url: str
     raw_title: str
     raw_text: str
-    raw_html: Optional[str] = None
-    published_at: Optional[datetime] = None
-    author: Optional[str] = None
+    raw_html: str | None = None
+    published_at: datetime | None = None
+    author: str | None = None
     language: str = "ru"
-    headers: Optional[str] = None
-    meta_info: Optional[str] = None
-    media_content: Optional[str] = None
+    headers: str | None = None
+    meta_info: str | None = None
+    media_content: str | None = None
     status: str = "raw"
 
     model_config = ConfigDict(from_attributes=True)
@@ -80,7 +80,7 @@ class ExtractedEntity(BaseModel):
     entity_type: str  # 'person', 'organization', 'location'
     count: int = 1
     importance_score: float = 0.3
-    context_snippet: Optional[str] = None
+    context_snippet: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -114,7 +114,7 @@ class ParserConfig(BaseModel):
 
     source_id: int
     source_name: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     request_delay: float = 1.0
     max_retries: int = 3
     timeout: int = 30
