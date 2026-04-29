@@ -239,10 +239,7 @@ class ArticleRepository:
                 # Создаём словарь час -> количество
                 stats_dict = {int(row["hour"]): row["count"] for row in rows}
 
-                # Генерируем 24 часа с текущего момента
-                from src.utils.datetime_utils import now_msk
-
-                now = now_msk()
+                now = now_msk_aware()
                 full_result = []
 
                 for i in range(24):
