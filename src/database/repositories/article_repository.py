@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db, now_msk_aware, MSK_TZ
+from src.utils.datetime_utils import format_for_db, now_msk_aware, now_msk
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -220,39 +220,39 @@ class ArticleRepository:
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_hourly_stats_24h(self) -> List[tuple]:
         """
-        Получает почасовую статистику за последние 24 часа.
+        Получает почасовую статистику за последние 24 часа:
+        - 23 полных часа + текущий незавершённый час
         """
         try:
             async with DatabasePoolManager.connection() as conn:
-                # Простой запрос, возвращающий только час (0-23) и количество
-                rows = await conn.fetch("""
+
+                now = now_msk()
+                current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+                twenty_four_hours_ago = current_hour_start - timedelta(hours=23)
+
+                rows = await conn.fetch(
+                    """
                     SELECT 
-                        EXTRACT(HOUR FROM published_at AT TIME ZONE 'Europe/Moscow') as hour,
+                        DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow') as hour_start,
                         COUNT(*) as count
                     FROM raw_articles
-                    WHERE published_at >= NOW() - INTERVAL '24 hours'
+                    WHERE published_at AT TIME ZONE 'Europe/Moscow' >= $1::timestamp
                         AND status != 'failed'
-                    GROUP BY EXTRACT(HOUR FROM published_at AT TIME ZONE 'Europe/Moscow')
-                    ORDER BY hour ASC
-                    """)
+                    GROUP BY DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow')
+                    ORDER BY hour_start ASC
+                    """,
+                    twenty_four_hours_ago,
+                )
 
-                # Создаём словарь час -> количество
-                stats_dict = {int(row["hour"]): row["count"] for row in rows}
+                # Создаём словарь час_начала -> количество
+                stats_dict = {row["hour_start"]: row["count"] for row in rows}
 
-                now = now_msk_aware()
+                # Генерируем 24 часа: с twenty_four_hours_ago до current_hour_start
                 full_result = []
-
                 for i in range(24):
-                    # Вычисляем час, который был i часов назад
-                    hour_dt = now - timedelta(hours=i)
-                    hour_num = hour_dt.hour
-                    # Для отображения используем время начала часа
-                    hour_start = hour_dt.replace(minute=0, second=0, microsecond=0)
-                    count = stats_dict.get(hour_num, 0)
+                    hour_start = twenty_four_hours_ago + timedelta(hours=i)
+                    count = stats_dict.get(hour_start, 0)
                     full_result.append((hour_start, count))
-
-                # Сортируем по времени
-                full_result.sort(key=lambda x: x[0])
 
                 return full_result
 
