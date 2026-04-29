@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db, now_msk_aware, now_msk
+from src.utils.datetime_utils import format_for_db, now_msk, now_msk_aware
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -120,9 +120,9 @@ class ArticleRepository:
                 """
                 SELECT id, source_id, original_id, url, raw_title, raw_text,
                        raw_html, media_content, published_at, author, language
-                FROM raw_articles 
-                WHERE status = $1 
-                ORDER BY published_at 
+                FROM raw_articles
+                WHERE status = $1
+                ORDER BY published_at
                 LIMIT $2
                 """,
                 status,
@@ -153,7 +153,7 @@ class ArticleRepository:
         """Общая статистика по статьям."""
         async with DatabasePoolManager.connection() as conn:
             row = await conn.fetchrow("""
-                SELECT 
+                SELECT
                     COUNT(*) as total,
                     COUNT(CASE WHEN status = 'raw' THEN 1 END) as raw,
                     COUNT(CASE WHEN status = 'processed' THEN 1 END) as processed,
@@ -171,7 +171,7 @@ class ArticleRepository:
             url_field = ", url" if with_urls else ""
             sql = f"""
                 SELECT raw_title, raw_text, published_at, author, source_id {url_field}
-                FROM raw_articles 
+                FROM raw_articles
                 WHERE (raw_title ILIKE $1 OR raw_text ILIKE $1)
                 AND status != 'failed'
                 ORDER BY published_at DESC
@@ -241,7 +241,7 @@ class ArticleRepository:
 
                 rows = await conn.fetch(
                     """
-                    SELECT 
+                    SELECT
                         DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow') as hour_start,
                         COUNT(*) as count
                     FROM raw_articles
@@ -281,6 +281,6 @@ class ArticleRepository:
                 import json
 
                 return json.loads(value)
-            except:
+            except Exception:
                 return None
         return None

@@ -140,15 +140,15 @@ class SummaryRepository:
                 # Получаем статьи, сбалансированные по времени
                 rows = await conn.fetch(
                     """
-                    SELECT 
-                        ra.raw_title as title, 
-                        ra.raw_text as text, 
-                        ra.published_at, 
-                        ra.url, 
+                    SELECT
+                        ra.raw_title as title,
+                        ra.raw_text as text,
+                        ra.published_at,
+                        ra.url,
                         s.name as source_name
                     FROM raw_articles ra
                     JOIN sources s ON ra.source_id = s.id
-                    WHERE ra.published_at >= $1 
+                    WHERE ra.published_at >= $1
                         AND ra.published_at <= $2
                         AND ra.status != 'failed'
                         AND LENGTH(ra.raw_text) BETWEEN 200 AND 5000
