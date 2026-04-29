@@ -306,9 +306,7 @@ class TInvestParser(BaseParser):
 
         return items, final_cursor
 
-    async def _request_posts(
-        self, ticker: str, cursor: str | None = None
-    ) -> dict[str, Any] | None:
+    async def _request_posts(self, ticker: str, cursor: str | None = None) -> dict[str, Any] | None:
         """Асинхронный запрос к tpulse."""
         loop = asyncio.get_event_loop()
 
@@ -396,19 +394,13 @@ class TInvestParser(BaseParser):
 
     def _apply_filters(self, item: ParsedItem, filters: dict[str, Any]) -> bool:
         """Применение фильтров к посту."""
-        # Минимальное количество реакций
-        if "min_reactions" in filters and item.metadata.get("total_reactions", 0) < filters["min_reactions"]:
-            return False
-
-        # Только с картинками
-        if filters.get("has_images", False) and not item.metadata.get("has_images", False):
-            return False
-
-        # Фильтр по автору
-        if "author" in filters and item.author != filters["author"]:
-            return False
-
-        return True
+        # Проверяем все условия фильтрации
+        fails_min_reactions = "min_reactions" in filters and item.metadata.get("total_reactions", 0) < filters["min_reactions"]
+        fails_has_images = filters.get("has_images", False) and not item.metadata.get("has_images", False)
+        fails_author = "author" in filters and item.author != filters["author"]
+        
+        # Возвращаем True только если ни одно условие не провалено
+        return not (fails_min_reactions or fails_has_images or fails_author)
 
     # Переопределяем валидацию для TP
     def _validate_item(self, item: ParsedItem) -> bool:

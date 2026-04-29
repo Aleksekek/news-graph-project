@@ -5,8 +5,8 @@
 import asyncio
 import logging
 import time
-from functools import wraps
 from collections.abc import Callable
+from functools import wraps
 from typing import Any
 
 from src.core.exceptions import RetryExhaustedError
