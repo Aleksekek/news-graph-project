@@ -138,7 +138,12 @@ class TestNewsTelegramBot:
         second_call = mock_update.callback_query.edit_message_text.call_args_list[1]
         response_text = second_call[0][0]
         assert "Активность по часам" in response_text
-        assert "28.04 10:00" in response_text
+        # Проверяем только часы, без даты
+        assert "10:00" in response_text
+        assert "11:00" in response_text
+        assert "12:00" in response_text
+        # Даты быть не должно
+        assert "28.04" not in response_text
         assert "Максимум: 30" in response_text
 
         mock_update.callback_query.answer.assert_called_once()
@@ -355,8 +360,14 @@ class TestHandlersIntegration:
 
         assert mock_update.callback_query.edit_message_text.called
         call_args = mock_update.callback_query.edit_message_text.call_args[0][0]
-        assert "28.04" in call_args or "27.04" in call_args
+
+        # Проверяем наличие часов (без дат)
+        assert "00:00" in call_args
+        assert "01:00" in call_args
         assert "Максимум:" in call_args
+        # Даты быть не должно
+        assert "28.04" not in call_args
+        assert "27.04" not in call_args
 
     @pytest.mark.asyncio
     async def test_stats_overall_integration(self, handlers):

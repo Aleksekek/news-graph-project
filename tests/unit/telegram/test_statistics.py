@@ -69,7 +69,7 @@ class TestStatistics:
         assert bar == expected
 
     def test_format_hourly_stats(self):
-        """Форматирование почастовой статистики."""
+        """Форматирование почасовой статистики (без дат)."""
         now = datetime(2026, 4, 28, 15, 0)
         stats = [
             (now - timedelta(hours=3), 10),
@@ -84,10 +84,12 @@ class TestStatistics:
         assert "Активность по часам (последние 24 ч)" in result
         assert "Максимум: 25 публикаций" in result
 
-        # Проверяем формат строки
+        # Проверяем формат строки - теперь только часы, без даты
         for dt, _ in stats:
-            time_str = dt.strftime("%d.%m %H:00")
+            time_str = dt.strftime("%H:00")  # Только час
             assert time_str in result
+            # Даты быть не должно
+            assert "28.04" not in result
 
     def test_format_hourly_stats_empty(self):
         """Форматирование пустой статистики."""
@@ -99,7 +101,9 @@ class TestStatistics:
         stats = [(datetime(2026, 4, 28, 10, 0), 42)]
         result = format_hourly_stats(stats)
 
-        assert "28.04 10:00" in result
+        # Только час, без даты
+        assert "10:00" in result
+        assert "28.04" not in result
         assert "42" in result
         # Полоска должна быть максимальной
         assert "█" * MAX_BAR_LENGTH in result
@@ -117,7 +121,7 @@ class TestStatistics:
 
         assert "Максимум: 0 публикаций" in result
         for dt, _ in stats:
-            time_str = dt.strftime("%d.%m %H:00")
+            time_str = dt.strftime("%H:00")
             assert time_str in result
             # Все полоски должны быть пустыми
             assert "░" * MAX_BAR_LENGTH in result
@@ -129,6 +133,24 @@ class TestStatistics:
 
         # Должно быть с пробелом как разделителем тысяч
         assert "12 345" in result
+
+    def test_format_hourly_stats_current_hour_marker(self):
+        """Проверка маркера текущего часа."""
+        with patch("src.infrastructure.telegram.statistics.now_msk") as mock_now:
+            # Замораживаем время на 10:30
+            mock_now.return_value = datetime(2026, 4, 28, 10, 30)
+
+            stats = [
+                (datetime(2026, 4, 28, 9, 0), 10),  # прошлый час
+                (datetime(2026, 4, 28, 10, 0), 5),  # текущий час
+            ]
+
+            result = format_hourly_stats(stats)
+
+            # Проверяем, что текущий час (10:00) помечен
+            assert "🔄 10:00" in result or "10:00" in result
+            # Проверяем, что прошлый час (09:00) не помечен
+            assert "09:00" in result
 
     @pytest.mark.asyncio
     async def test_get_hourly_stats_success(self):

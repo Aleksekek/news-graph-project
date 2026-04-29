@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from src.database.repositories.article_repository import ArticleRepository
-from src.utils.datetime_utils import format_for_display
+from src.utils.datetime_utils import format_for_display, now_msk
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def create_hourly_bar(count: int, max_count: int) -> str:
     bar_length = int((count / max_count) * MAX_BAR_LENGTH)
     bar_length = max(0, min(MAX_BAR_LENGTH, bar_length))
     if bar_length == 0 and count > 0:
-        bar_length = 1  # Минимум 1 блок, если есть хоть одна статья
+        bar_length = 1
     bar = "█" * bar_length
     bar = bar.ljust(MAX_BAR_LENGTH, "░")
     return bar
@@ -40,21 +40,30 @@ def create_hourly_bar(count: int, max_count: int) -> str:
 def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     """
     Форматирует почасовую статистику для отображения.
+    Текущий час помечается звёздочкой.
     """
     if not stats:
         return "❌ Нет данных для статистики"
 
-    # Находим максимальное значение
     max_count = max(count for _, count in stats)
+    now = now_msk()
+    current_hour = now.hour
 
     response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
     response += f"📈 Максимум: {max_count} публикаций\n\n"
 
     for dt, count in stats:
-        time_str = dt.strftime("%d.%m %H:00")
+        time_str = dt.strftime("%H:00")
+
+        # Помечаем текущий час
+        if dt.hour == current_hour:
+            time_str = f"🔄 {time_str}"
+
         bar = create_hourly_bar(count, max_count)
         formatted_count = f"{count:,}".replace(",", " ")
         response += f"• {time_str} {bar} {formatted_count}\n"
+
+    response += f"\n🔄 — текущий час (данные обновляются в реальном времени)"
 
     return response
 

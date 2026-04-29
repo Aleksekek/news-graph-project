@@ -220,7 +220,7 @@ class ArticleRepository:
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
     async def get_hourly_stats_24h(self) -> List[tuple]:
         """
-        Получает почасовую статистику за последние 24 часа (плавающее окно).
+        Получает почасовую статистику за последние 24 часа (включая текущий неполный час).
         Возвращает часы с датами в MSK.
 
         Returns:
@@ -229,12 +229,15 @@ class ArticleRepository:
         """
         try:
             async with DatabasePoolManager.connection() as conn:
-                # Текущее время в MSK с таймзоной
+                # Текущее время в MSK с таймзоной (используем нашу функцию)
                 now = now_msk_aware()
-                # 24 часа назад
-                cutoff = now - timedelta(hours=24)
+                # Округляем до начала текущего часа для нижней границы
+                current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+                # Берём 24 часа назад от начала текущего часа
+                cutoff = current_hour_start - timedelta(hours=24)
 
-                # Запрос с группировкой по часам с учётом даты
+                # Запрос с группировкой по часам
+                # Включаем текущий неполный час (published_at < now, а не < current_hour_start)
                 rows = await conn.fetch(
                     """
                     SELECT 
@@ -242,31 +245,25 @@ class ArticleRepository:
                         COUNT(*) as count
                     FROM raw_articles
                     WHERE published_at >= $1 
-                        AND published_at <= $2
+                        AND published_at < $2
                         AND status != 'failed'
                     GROUP BY DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow')
                     ORDER BY hour_start ASC
                     """,
                     cutoff,
-                    now,
+                    now,  # используем now, а не current_hour_start, чтобы включить текущий час
                 )
 
-                # Преобразуем результат в список кортежей (datetime, count)
-                result = [(row["hour_start"], row["count"]) for row in rows]
+                # Преобразуем результат в словарь для быстрого доступа
+                stats_dict = {row["hour_start"]: row["count"] for row in rows}
 
-                # Создаём полную сетку из 24 часов (включая часы без статей)
+                # Создаём полную сетку из 24 часов (включая текущий неполный час)
                 full_result = []
                 for i in range(24):
-                    hour_start = (cutoff + timedelta(hours=i)).replace(
-                        minute=0, second=0, microsecond=0
-                    )
+                    hour_start = cutoff + timedelta(hours=i)
                     # Преобразуем в naive для единообразия
                     hour_start_naive = hour_start.replace(tzinfo=None)
-
-                    # Ищем есть ли данные для этого часа
-                    count = next(
-                        (c for dt, c in result if dt.replace(tzinfo=None) == hour_start_naive), 0
-                    )
+                    count = stats_dict.get(hour_start, 0)
                     full_result.append((hour_start_naive, count))
 
                 return full_result
