@@ -47,7 +47,7 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          pytest .\tests\ --cov=src
+          pytest tests --cov=src
       
       - name: Upload coverage
         uses: actions/upload-artifact@v4
