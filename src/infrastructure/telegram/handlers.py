@@ -231,23 +231,31 @@ class Handlers:
         await query.edit_message_text("📊 Собираю почасовую статистику...")
 
         try:
+            logger.info("stats_hourly: вызываю get_hourly_stats")
             hourly_stats = await get_hourly_stats(self.article_repo)
+            logger.info(f"stats_hourly: получил {len(hourly_stats)} записей")
 
-            if not hourly_stats or all(count == 0 for _, count in hourly_stats):
+            if not hourly_stats:
+                logger.warning("stats_hourly: hourly_stats is empty")
                 await query.edit_message_text(
                     "📊 За последние 24 часа нет данных о публикациях.",
                     reply_markup=get_back_button("menu_stats"),
                 )
-            else:
-                response = format_hourly_stats(hourly_stats)
-                await query.edit_message_text(
-                    response,
-                    reply_markup=get_back_button("menu_stats"),
-                    parse_mode="Markdown",
-                )
+                await query.answer()
+                return
+
+            logger.info(f"stats_hourly: формирую ответ")
+            response = format_hourly_stats(hourly_stats)
+            logger.info(f"stats_hourly: ответ сформирован, длина={len(response)}")
+
+            await query.edit_message_text(
+                response,
+                reply_markup=get_back_button("menu_stats"),
+                parse_mode="Markdown",
+            )
 
         except Exception as e:
-            logger.error(f"Ошибка stats_hourly: {e}")
+            logger.error(f"Ошибка stats_hourly: {e}", exc_info=True)
             await query.edit_message_text("❌ Ошибка получения статистики")
 
         await query.answer()

@@ -41,10 +41,14 @@ def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     """
     Форматирует почасовую статистику для отображения.
     """
+    logger.info(f"format_hourly_stats: получено {len(stats)} часов")
+    
     if not stats:
+        logger.warning("format_hourly_stats: stats is empty")
         return "❌ Нет данных для статистики"
 
     max_count = max(count for _, count in stats)
+    logger.info(f"format_hourly_stats: max_count={max_count}")
 
     response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
     response += f"📈 Максимум: {max_count} публикаций\n\n"
@@ -68,4 +72,19 @@ async def get_hourly_stats(repo: ArticleRepository) -> List[Tuple[datetime, int]
     Returns:
         Список кортежей (datetime начала часа в MSK, количество статей)
     """
-    return await repo.get_hourly_stats_24h()
+    logger.info("get_hourly_stats: вызываю repo.get_hourly_stats_24h()")
+    result = await repo.get_hourly_stats_24h()
+    logger.info(f"get_hourly_stats: получил {len(result)} записей")
+    
+    # Логируем первые 5 записей для проверки
+    if result:
+        logger.info(f"get_hourly_stats: первые 5 записей: {result[:5]}")
+        # Проверяем, есть ли ненулевые значения
+        non_zero = [(dt, c) for dt, c in result if c > 0]
+        logger.info(f"get_hourly_stats: ненулевых записей: {len(non_zero)}")
+        if non_zero:
+            logger.info(f"get_hourly_stats: первая ненулевая: {non_zero[0]}")
+    else:
+        logger.warning("get_hourly_stats: результат пустой!")
+    
+    return result
