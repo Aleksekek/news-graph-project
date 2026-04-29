@@ -39,17 +39,31 @@ class ScheduleConfig:
 
         # Дефолтные задачи
         default_tasks = {
-            "lenta_hourly": TaskConfig(
-                name="Часовой парсинг Lenta.ru",
-                cron="10,30,50 * * * *",
+            # Lenta: днем каждые 30 мин (на 00 и 30), ночью каждый час (на 00)
+            "lenta_day": TaskConfig(
+                name="Дневной парсинг Lenta.ru (08:00-22:00)",
+                cron="0,30 8-21 * * *",
                 enabled=True,
                 kwargs={"limit": 30, "categories": LENTA_CATEGORIES},
             ),
-            "tinvest_hourly": TaskConfig(
-                name="Часовой парсинг TInvest",
-                cron="0,20,40 * * * *",
+            "lenta_night": TaskConfig(
+                name="Ночной парсинг Lenta.ru",
+                cron="0 0-7,22,23 * * *",
                 enabled=True,
-                kwargs={"limit": 30, "tickers": TINVEST_TICKERS},
+                kwargs={"limit": 15, "categories": LENTA_CATEGORIES},
+            ),
+            # TInvest: сдвинут на 7 минут (днем каждые 15 мин, ночью каждые 30 мин)
+            "tinvest_day": TaskConfig(
+                name="Дневной парсинг TInvest (08:00-22:00)",
+                cron="7,22,37,52 8-21 * * *",  # 8:07, 8:22, 8:37, 8:52...
+                enabled=True,
+                kwargs={"limit": 20, "tickers": TINVEST_TICKERS},
+            ),
+            "tinvest_night": TaskConfig(
+                name="Ночной парсинг TInvest",
+                cron="7,37 0-7,22,23 * * *",  # 22:07, 22:37, 23:07, 0:07, 0:37...
+                enabled=True,  # и так до 7:37
+                kwargs={"limit": 25, "tickers": TINVEST_TICKERS},
             ),
         }
 
