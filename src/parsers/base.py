@@ -6,7 +6,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
@@ -25,8 +25,8 @@ class ParseResult:
 
     def __init__(
         self,
-        items: List[ParsedItem],
-        cursor: Optional[str] = None,
+        items: list[ParsedItem],
+        cursor: str | None = None,
         has_more: bool = False,
     ):
         self.items = items
@@ -52,7 +52,7 @@ class BaseParser(ABC):
             config: Конфигурация парсера
         """
         self.config = config
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self.logger = get_logger(f"parsers.{config.source_name}")
 
     @property
@@ -98,7 +98,7 @@ class BaseParser(ABC):
         pass
 
     @abstractmethod
-    def to_parsed_item(self, raw_data: Dict[str, Any]) -> ParsedItem:
+    def to_parsed_item(self, raw_data: dict[str, Any]) -> ParsedItem:
         """
         Конвертация сырых данных в ParsedItem.
         Каждый парсер реализует свою логику.
@@ -176,7 +176,7 @@ class BaseParser(ABC):
         except Exception as e:
             raise ParserError(f"Ошибка загрузки {url}: {e}")
 
-    async def _fetch_json(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def _fetch_json(self, url: str, **kwargs) -> dict[str, Any]:
         """Загрузка JSON данных."""
         text = await self._fetch_url(url, **kwargs)
 

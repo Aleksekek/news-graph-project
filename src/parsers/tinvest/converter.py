@@ -4,7 +4,6 @@
 """
 
 import json
-from typing import Optional
 
 from src.core.models import ArticleForDB, ParsedItem
 from src.utils.datetime_utils import naive_msk_dt
@@ -52,7 +51,7 @@ class TInvestConverter:
 
         return cleaned
 
-    def _prepare_media(self, images: list) -> Optional[str]:
+    def _prepare_media(self, images: list) -> str | None:
         """Подготовка медиа-контента."""
         if not images:
             return None
@@ -70,7 +69,7 @@ class TInvestConverter:
 
         return json.dumps(media, ensure_ascii=False) if media else None
 
-    def _prepare_meta(self, item: ParsedItem) -> Optional[str]:
+    def _prepare_meta(self, item: ParsedItem) -> str | None:
         """Подготовка мета-информации."""
         meta = {
             "mentioned_tickers": item.metadata.get("mentioned_tickers", []),

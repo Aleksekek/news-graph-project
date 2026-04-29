@@ -3,8 +3,8 @@
 Только операции с этой таблицей.
 """
 
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set
+from datetime import timedelta
+from typing import Any
 
 import asyncpg
 
@@ -24,7 +24,7 @@ class ArticleRepository:
         self.logger = get_logger(self.__class__.__name__)
 
     @async_retry(exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0)
-    async def save_batch(self, articles: List[ArticleForDB]) -> ProcessingStats:
+    async def save_batch(self, articles: list[ArticleForDB]) -> ProcessingStats:
         """
         Пакетное сохранение статей.
 
@@ -106,14 +106,14 @@ class ArticleRepository:
         return stats
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_existing_urls(self, source_id: int) -> Set[str]:
+    async def get_existing_urls(self, source_id: int) -> set[str]:
         """Получение всех URL для источника."""
         async with DatabasePoolManager.connection() as conn:
             rows = await conn.fetch("SELECT url FROM raw_articles WHERE source_id = $1", source_id)
             return {row["url"] for row in rows}
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_unprocessed(self, limit: int = 100, status: str = "raw") -> List[Dict[str, Any]]:
+    async def get_unprocessed(self, limit: int = 100, status: str = "raw") -> list[dict[str, Any]]:
         """Получение необработанных статей для NLP."""
         async with DatabasePoolManager.connection() as conn:
             rows = await conn.fetch(
@@ -149,7 +149,7 @@ class ArticleRepository:
             return result == "UPDATE 1"
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Общая статистика по статьям."""
         async with DatabasePoolManager.connection() as conn:
             row = await conn.fetchrow("""
@@ -165,7 +165,7 @@ class ArticleRepository:
             return dict(row) if row else {}
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def search(self, query: str, limit: int = 10, with_urls: bool = False) -> List[Dict]:
+    async def search(self, query: str, limit: int = 10, with_urls: bool = False) -> list[dict]:
         """Поиск статей по тексту."""
         async with DatabasePoolManager.connection() as conn:
             url_field = ", url" if with_urls else ""
@@ -181,7 +181,7 @@ class ArticleRepository:
             return [dict(row) for row in rows]
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_sources_stats(self) -> List[tuple]:
+    async def get_sources_stats(self) -> list[tuple]:
         """Получить статистику по источникам."""
         try:
             async with DatabasePoolManager.connection() as conn:
@@ -198,7 +198,7 @@ class ArticleRepository:
             return []
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_daily_stats(self, days: int = 7) -> List[tuple]:
+    async def get_daily_stats(self, days: int = 7) -> list[tuple]:
         """Получить ежедневную статистику за последние N дней."""
         try:
             async with DatabasePoolManager.connection() as conn:
@@ -227,7 +227,7 @@ class ArticleRepository:
             return []
 
     @async_retry(exceptions=asyncpg.exceptions.PostgresError, max_attempts=3, delay=1.0)
-    async def get_hourly_stats_24h(self) -> List[tuple]:
+    async def get_hourly_stats_24h(self) -> list[tuple]:
         """
         Получает почасовую статистику за последние 24 часа:
         - 23 полных часа + текущий незавершённый час

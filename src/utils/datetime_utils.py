@@ -5,7 +5,6 @@
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 # Константы
 MSK_OFFSET = timedelta(hours=3)
@@ -96,7 +95,7 @@ def msk_to_utc(msk_dt: datetime) -> datetime:
     return msk_aware.astimezone(timezone.utc)
 
 
-def parse_rfc2822_date(date_str: str) -> Optional[datetime]:
+def parse_rfc2822_date(date_str: str) -> datetime | None:
     """
     Парсит RFC 2822 дату (RSS формат) в MSK naive.
     RSS всегда в UTC, поэтому конвертируем.
@@ -117,7 +116,7 @@ def parse_rfc2822_date(date_str: str) -> Optional[datetime]:
     return None
 
 
-def parse_russian_date(date_str: str) -> Optional[datetime]:
+def parse_russian_date(date_str: str) -> datetime | None:
     """
     Парсит русскоязычную дату формата Lenta.ru.
     Пример: "19:09, 17 января 2026"
@@ -148,7 +147,7 @@ def parse_russian_date(date_str: str) -> Optional[datetime]:
         return None
 
 
-def parse_html_date(date_str: str, source: str = "unknown") -> Optional[datetime]:
+def parse_html_date(date_str: str, source: str = "unknown") -> datetime | None:
     """
     Парсит дату из HTML страницы.
 

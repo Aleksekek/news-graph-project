@@ -3,7 +3,6 @@
 """
 
 import re
-from typing import Optional
 
 
 def escape_markdown(text: str, version: int = 2) -> str:

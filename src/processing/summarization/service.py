@@ -5,7 +5,6 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from src.database.repositories.summary_repository import SummaryRepository
 from src.processing.llm.deepseek import DeepSeekAnalyzer
@@ -20,7 +19,7 @@ class SummarizationService:
         self.llm = DeepSeekAnalyzer()
         self.repo = SummaryRepository()
 
-    async def generate_hourly_summary(self, hour: datetime) -> Optional[int]:
+    async def generate_hourly_summary(self, hour: datetime) -> int | None:
         """Генерирует часовую суммаризацию."""
         period_start = hour.replace(minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(hours=1)
@@ -92,7 +91,7 @@ class SummarizationService:
         )
         return summary_id
 
-    async def generate_daily_summary(self, date: datetime) -> Optional[int]:
+    async def generate_daily_summary(self, date: datetime) -> int | None:
         """Генерирует дневную суммаризацию на основе часовых."""
         day_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)

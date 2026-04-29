@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from src.config.settings import settings
 
@@ -86,7 +86,7 @@ def setup_logging() -> logging.Logger:
     return get_logger("news_graph")
 
 
-def log_async_execution_time(logger_name: Optional[str] = None):
+def log_async_execution_time(logger_name: str | None = None):
     """
     Декоратор для логирования времени выполнения асинхронной функции.
 
@@ -119,7 +119,7 @@ def log_async_execution_time(logger_name: Optional[str] = None):
     return decorator
 
 
-def log_execution_time(logger_name: Optional[str] = None):
+def log_execution_time(logger_name: str | None = None):
     """
     Декоратор для логирования времени выполнения синхронной функции.
 

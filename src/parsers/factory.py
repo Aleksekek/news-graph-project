@@ -2,7 +2,7 @@
 Фабрика для создания парсеров по имени источника.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.core.constants import SOURCE_IDS
 from src.core.exceptions import ConfigurationError, SourceNotFoundError
@@ -19,13 +19,13 @@ class ParserFactory:
     """
 
     # Реестр парсеров
-    _parsers_registry: Dict[str, type] = {
+    _parsers_registry: dict[str, type] = {
         "lenta": LentaParser,
         "tinvest": TInvestParser,
     }
 
     # Конфигурации по умолчанию для каждого источника
-    _default_configs: Dict[str, Dict[str, Any]] = {
+    _default_configs: dict[str, dict[str, Any]] = {
         "lenta": {
             "base_url": "https://lenta.ru",
             "request_delay": 2.0,
@@ -43,7 +43,7 @@ class ParserFactory:
 
     @classmethod
     def create(
-        cls, source_name: str, config_overrides: Optional[Dict[str, Any]] = None
+        cls, source_name: str, config_overrides: dict[str, Any] | None = None
     ) -> BaseParser:
         """
         Создание парсера по имени источника.
@@ -92,7 +92,7 @@ class ParserFactory:
         cls,
         source_name: str,
         parser_class: type,
-        default_config: Optional[Dict[str, Any]] = None,
+        default_config: dict[str, Any] | None = None,
     ):
         """Регистрация нового парсера."""
         if not issubclass(parser_class, BaseParser):

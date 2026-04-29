@@ -3,7 +3,6 @@
 """
 
 import logging
-from typing import Dict, List
 
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
@@ -74,7 +73,7 @@ class QAHandlers:
             logger.error(f"Ошибка ответа на вопрос: {e}")
             await status_msg.edit_text("❌ Не удалось проанализировать новости")
 
-    def _build_qa_prompt(self, question: str, articles: List[Dict]) -> str:
+    def _build_qa_prompt(self, question: str, articles: list[dict]) -> str:
         """Построение промпта для LLM."""
         posts_text = []
         for a in articles[:20]:

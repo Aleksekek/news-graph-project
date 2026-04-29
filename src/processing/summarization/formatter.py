@@ -2,7 +2,7 @@
 Форматирование суммаризаций для вывода.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from src.utils.datetime_utils import format_for_display
 
@@ -10,7 +10,7 @@ from src.utils.datetime_utils import format_for_display
 class SummaryFormatter:
     """Форматирование суммаризаций для разных целей."""
 
-    def format_daily_digest(self, summary: Dict[str, Any]) -> str:
+    def format_daily_digest(self, summary: dict[str, Any]) -> str:
         """Форматирование дневного дайджеста."""
         content = summary.get("content", {})
         if not isinstance(content, dict):

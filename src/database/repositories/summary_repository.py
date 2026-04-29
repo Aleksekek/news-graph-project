@@ -5,7 +5,6 @@
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from src.database.pool import DatabasePoolManager
 
@@ -20,8 +19,8 @@ class SummaryRepository:
         period_start: datetime,
         period_end: datetime,
         period_type: str,
-        content: Dict,
-        model_used: Optional[str] = None,
+        content: dict,
+        model_used: str | None = None,
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         cost_usd: float = 0.0,
@@ -62,8 +61,8 @@ class SummaryRepository:
     async def get_for_period(
         start: datetime,
         end: datetime,
-        period_type: Optional[str] = None,
-    ) -> List[Dict]:
+        period_type: str | None = None,
+    ) -> list[dict]:
         """
         Получает суммаризации за период.
 
@@ -102,7 +101,7 @@ class SummaryRepository:
             return []
 
     @staticmethod
-    async def get_last(period_type: str = "hour") -> Optional[Dict]:
+    async def get_last(period_type: str = "hour") -> dict | None:
         """Получает последнюю суммаризацию заданного типа."""
         try:
             async with DatabasePoolManager.connection() as conn:
@@ -132,7 +131,7 @@ class SummaryRepository:
         start: datetime,
         end: datetime,
         total_limit: int = 40,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Умная выборка статей для суммаризации.
         """

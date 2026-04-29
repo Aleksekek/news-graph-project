@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -26,11 +25,11 @@ class DeepSeekAnalyzer:
 
     async def generate_summary(
         self,
-        posts: List[Dict],
+        posts: list[dict],
         period_start: datetime,
         period_end: datetime,
-        prev_summary: Optional[str] = None,
-    ) -> Optional[Dict]:
+        prev_summary: str | None = None,
+    ) -> dict | None:
         """
         Генерирует суммаризацию за период.
 
@@ -41,7 +40,7 @@ class DeepSeekAnalyzer:
             prev_summary: Суммаризация предыдущего периода (для контекста)
 
         Returns:
-            Dict с ключами: topics, summary, trend, important_events, _meta
+            dict с ключами: topics, summary, trend, important_events, _meta
         """
         if not posts:
             return None
@@ -99,10 +98,10 @@ class DeepSeekAnalyzer:
 
     def _build_prompt(
         self,
-        posts_text: List[str],
+        posts_text: list[str],
         period_start: datetime,
         period_end: datetime,
-        prev_summary: Optional[str] = None,
+        prev_summary: str | None = None,
     ) -> str:
         """Собирает промпт для LLM."""
         start_str = period_start.strftime("%d.%m.%Y %H:%M")
@@ -131,7 +130,7 @@ class DeepSeekAnalyzer:
 """
         return prompt
 
-    def _parse_response(self, response_text: str, usage) -> Dict:
+    def _parse_response(self, response_text: str, usage) -> dict:
         """Парсит ответ LLM в словарь."""
         try:
             # Очищаем от маркеров кода

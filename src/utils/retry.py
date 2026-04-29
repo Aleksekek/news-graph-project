@@ -6,17 +6,17 @@ import asyncio
 import logging
 import time
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple, Type
+from typing import Any, Callable
 
 from src.core.exceptions import RetryExhaustedError
 
 
 def async_retry(
-    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    exceptions: tuple[type[Exception], ...] = (Exception,),
     max_attempts: int = 3,
     delay: float = 1.0,
     backoff: float = 2.0,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Декоратор для повторных попыток выполнения асинхронных функций.
@@ -70,11 +70,11 @@ def async_retry(
 
 
 def retry(
-    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    exceptions: tuple[type[Exception], ...] = (Exception,),
     max_attempts: int = 3,
     delay: float = 1.0,
     backoff: float = 2.0,
-    logger: Optional[logging.Logger] = None,
+    logger: logging.Logger | None = None,
 ):
     """
     Декоратор для повторных попыток выполнения синхронных функций.

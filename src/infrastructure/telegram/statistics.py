@@ -4,7 +4,6 @@
 
 import logging
 from datetime import datetime
-from typing import List, Tuple
 
 from src.database.repositories.article_repository import ArticleRepository
 from src.utils.datetime_utils import format_for_display, now_msk
@@ -37,7 +36,7 @@ def create_hourly_bar(count: int, max_count: int) -> str:
     return bar
 
 
-def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
+def format_hourly_stats(stats: list[tuple[datetime, int]]) -> str:
     """
     Форматирует почасовую статистику для отображения.
     """
@@ -62,7 +61,7 @@ def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     return response
 
 
-async def get_hourly_stats(repo: ArticleRepository) -> List[Tuple[datetime, int]]:
+async def get_hourly_stats(repo: ArticleRepository) -> list[tuple[datetime, int]]:
     """
     Получает почасовую статистику за последние 24 часа.
 

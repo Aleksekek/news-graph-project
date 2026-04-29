@@ -2,7 +2,6 @@
 Фабрика для создания конвертеров по имени источника.
 """
 
-from typing import Dict, Type
 
 from src.core.exceptions import SourceNotFoundError
 from src.parsers.lenta.converter import LentaConverter
@@ -12,7 +11,7 @@ from src.parsers.tinvest.converter import TInvestConverter
 class ConverterFactory:
     """Фабрика конвертеров."""
 
-    _converters: Dict[str, Type] = {
+    _converters: dict[str, type] = {
         "lenta": LentaConverter,
         "tinvest": TInvestConverter,
     }
@@ -30,6 +29,6 @@ class ConverterFactory:
         return converter_class()
 
     @classmethod
-    def register(cls, source_name: str, converter_class: Type):
+    def register(cls, source_name: str, converter_class: type):
         """Регистрация нового конвертера."""
         cls._converters[source_name] = converter_class

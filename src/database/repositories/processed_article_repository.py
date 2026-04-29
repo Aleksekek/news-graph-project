@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import asyncpg
 
@@ -49,7 +49,7 @@ class ProcessedArticleRepository:
             return row["id"]
 
     @async_retry(exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0)
-    async def update_processing_flags(self, processed_id: int, flags: Dict[str, Any]) -> None:
+    async def update_processing_flags(self, processed_id: int, flags: dict[str, Any]) -> None:
         """Обновляет флаги этапов обработки."""
         import json
 
@@ -61,7 +61,7 @@ class ProcessedArticleRepository:
             )
 
     @async_retry(exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0)
-    async def get_by_raw_id(self, raw_article_id: int) -> Optional[Dict[str, Any]]:
+    async def get_by_raw_id(self, raw_article_id: int) -> dict[str, Any] | None:
         """Возвращает processed_article по raw_article_id."""
         async with DatabasePoolManager.connection() as conn:
             row = await conn.fetchrow(

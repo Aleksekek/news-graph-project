@@ -4,7 +4,6 @@ Telegram бот для News Graph Project.
 
 import logging
 import warnings
-from typing import Dict, Optional
 
 from telegram import Update
 from telegram.ext import (
@@ -38,10 +37,10 @@ logger = logging.getLogger(__name__)
 class NewsTelegramBot:
     """Новостной телеграм бот."""
 
-    def __init__(self, token: str, proxy_url: Optional[str] = None):
+    def __init__(self, token: str, proxy_url: str | None = None):
         self.token = token
         self.proxy_url = proxy_url
-        self.subscribers: Dict[int, Dict] = {}
+        self.subscribers: dict[int, dict] = {}
 
         # Репозитории
         self.article_repo = ArticleRepository()

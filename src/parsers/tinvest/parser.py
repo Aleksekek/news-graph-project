@@ -6,7 +6,7 @@
 import asyncio
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from tpulse import TinkoffPulse
 
@@ -22,7 +22,7 @@ class TInvestParser(BaseParser):
     Парсер Тинькофф Пульса.
 
     Параметры через filters в parse():
-        - tickers: List[str] - список тикеров (обязательный)
+        - tickers: list[str] - список тикеров (обязательный)
         - min_reactions: int - минимальное количество реакций
         - has_images: bool - только посты с картинками
         - author: str - фильтр по автору
@@ -47,7 +47,7 @@ class TInvestParser(BaseParser):
         Парсинг свежих постов.
 
         Filters:
-            tickers: List[str] - тикеры для поиска
+            tickers: list[str] - тикеры для поиска
             min_reactions: int - минимальное количество реакций
             has_images: bool - только с картинками
             author: str - фильтр по автору
@@ -104,7 +104,7 @@ class TInvestParser(BaseParser):
         Архивный парсинг за период.
 
         Filters:
-            tickers: List[str] - тикеры для поиска
+            tickers: list[str] - тикеры для поиска
             start_cursor: str - курсор для продолжения
         """
         tickers = filters.get("tickers", self.default_tickers)
@@ -140,7 +140,7 @@ class TInvestParser(BaseParser):
 
         return ParseResult(all_items)
 
-    def to_parsed_item(self, raw_data: Dict[str, Any]) -> ParsedItem:
+    def to_parsed_item(self, raw_data: dict[str, Any]) -> ParsedItem:
         """Конвертация сырых данных в ParsedItem."""
         post = raw_data["post"]
         ticker = raw_data["ticker"]
@@ -201,8 +201,8 @@ class TInvestParser(BaseParser):
         self,
         ticker: str,
         limit: int,
-        filters: Dict[str, Any],
-    ) -> List[ParsedItem]:
+        filters: dict[str, Any],
+    ) -> list[ParsedItem]:
         """Получение постов для одного тикера."""
         items = []
         cursor = None
@@ -245,9 +245,9 @@ class TInvestParser(BaseParser):
         start_date: datetime,
         end_date: datetime,
         limit: int,
-        start_cursor: Optional[str],
-        filters: Dict[str, Any],
-    ) -> tuple[List[ParsedItem], Optional[str]]:
+        start_cursor: str | None,
+        filters: dict[str, Any],
+    ) -> tuple[list[ParsedItem], str | None]:
         """Исторический парсинг с фильтром по дате."""
         items = []
         cursor = start_cursor
@@ -307,8 +307,8 @@ class TInvestParser(BaseParser):
         return items, final_cursor
 
     async def _request_posts(
-        self, ticker: str, cursor: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, ticker: str, cursor: str | None = None
+    ) -> dict[str, Any] | None:
         """Асинхронный запрос к tpulse."""
         loop = asyncio.get_event_loop()
 
@@ -321,11 +321,11 @@ class TInvestParser(BaseParser):
 
     # ==================== Хелперы ====================
 
-    def _extract_author(self, owner: Dict[str, Any]) -> str:
+    def _extract_author(self, owner: dict[str, Any]) -> str:
         """Извлечение имени автора."""
         return owner.get("nickname", "") or owner.get("name", "") or "Аноним"
 
-    def _extract_date(self, post: Dict[str, Any]) -> Optional[datetime]:
+    def _extract_date(self, post: dict[str, Any]) -> datetime | None:
         """Извлечение даты из поста (API возвращает в UTC с суффиксом Z)."""
         try:
             inserted = post.get("inserted", "")
@@ -345,7 +345,7 @@ class TInvestParser(BaseParser):
             self.logger.debug(f"Ошибка парсинга даты: {e}")
             return None
 
-    def _generate_id(self, post: Dict[str, Any]) -> str:
+    def _generate_id(self, post: dict[str, Any]) -> str:
         """Генерация уникального ID поста."""
         post_id = post.get("id", "")
         inserted = post.get("inserted", "")
@@ -356,7 +356,7 @@ class TInvestParser(BaseParser):
 
         return f"tinvest_{hash_obj}"
 
-    def _generate_url(self, post: Dict[str, Any]) -> str:
+    def _generate_url(self, post: dict[str, Any]) -> str:
         """Генерация URL поста."""
         owner = post.get("owner", {})
         nickname = owner.get("nickname", "")
@@ -367,7 +367,7 @@ class TInvestParser(BaseParser):
 
         return ""
 
-    def _make_title(self, text: str, author: str, tickers: List[str]) -> str:
+    def _make_title(self, text: str, author: str, tickers: list[str]) -> str:
         """Генерация заголовка из текста."""
         if not text:
             return "Без заголовка"
@@ -394,7 +394,7 @@ class TInvestParser(BaseParser):
 
         return title[:200] + ("..." if len(title) > 200 else "")
 
-    def _apply_filters(self, item: ParsedItem, filters: Dict[str, Any]) -> bool:
+    def _apply_filters(self, item: ParsedItem, filters: dict[str, Any]) -> bool:
         """Применение фильтров к посту."""
         # Минимальное количество реакций
         if "min_reactions" in filters:

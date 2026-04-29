@@ -6,7 +6,7 @@
 import asyncio
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import feedparser
 from bs4 import BeautifulSoup
@@ -22,7 +22,7 @@ class LentaParser(BaseParser):
     """
     Парсер Lenta.ru.
     Параметры через filters в parse():
-        - categories: List[str] - фильтр по категориям
+        - categories: list[str] - фильтр по категориям
         - min_length: int - минимальная длина статьи (по умолчанию 100)
     """
 
@@ -43,7 +43,7 @@ class LentaParser(BaseParser):
         Парсинг свежих статей через RSS.
 
         Filters:
-            categories: List[str] - фильтр по категориям
+            categories: list[str] - фильтр по категориям
             min_length: int - минимальная длина текста
         """
         categories = filters.get("categories", self.default_categories)
@@ -76,7 +76,7 @@ class LentaParser(BaseParser):
         Архивный парсинг Lenta.ru за период.
 
         Filters:
-            categories: List[str] - фильтр по категориям
+            categories: list[str] - фильтр по категориям
             max_per_day: int - максимум статей в день (default 20)
             max_pages_per_day: int - максимум страниц в день (default 5)
         """
@@ -113,7 +113,7 @@ class LentaParser(BaseParser):
 
         return ParseResult(all_articles)
 
-    def to_parsed_item(self, raw_data: Dict[str, Any]) -> ParsedItem:
+    def to_parsed_item(self, raw_data: dict[str, Any]) -> ParsedItem:
         """Конвертация сырых данных в ParsedItem."""
         return ParsedItem(
             source_id=self.source_id,
@@ -138,8 +138,8 @@ class LentaParser(BaseParser):
     # ==================== Внутренние методы ====================
 
     async def _fetch_rss(
-        self, limit: int, categories: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+        self, limit: int, categories: list[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Получение RSS ленты с фильтрацией."""
         self.logger.debug(f"Загрузка RSS: {self.rss_url}")
 
@@ -187,12 +187,12 @@ class LentaParser(BaseParser):
             raise ParserError(f"Ошибка загрузки RSS: {e}")
 
     async def _fetch_articles_parallel(
-        self, rss_items: List[Dict], min_length: int
-    ) -> List[ParsedItem]:
+        self, rss_items: list[dict], min_length: int
+    ) -> list[ParsedItem]:
         """Параллельная загрузка и парсинг статей."""
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
-        async def fetch_one(item: Dict) -> Optional[ParsedItem]:
+        async def fetch_one(item: dict) -> ParsedItem | None:
             async with semaphore:
                 try:
                     article_data = await self._parse_article_page(
@@ -218,8 +218,8 @@ class LentaParser(BaseParser):
         return [r for r in results if r is not None]
 
     async def _parse_article_page(
-        self, url: str, fallback_date: Optional[datetime] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, url: str, fallback_date: datetime | None = None
+    ) -> dict[str, Any] | None:
         """Парсинг HTML страницы статьи."""
         html = await self._fetch_url(url)
         soup = BeautifulSoup(html, "html.parser")
@@ -267,9 +267,9 @@ class LentaParser(BaseParser):
         date: datetime,
         max_articles: int,
         max_pages: int,
-        categories: Optional[List[str]],
+        categories: list[str] | None,
         min_length: int,
-    ) -> List[ParsedItem]:
+    ) -> list[ParsedItem]:
         """Парсинг одного дня архива."""
         date_str = date.strftime("%Y/%m/%d")
         archive_url = f"{self.base_url}/news/{date_str}/"
@@ -287,7 +287,7 @@ class LentaParser(BaseParser):
         # Параллельная загрузка
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
-        async def fetch_archive(url: str) -> Optional[ParsedItem]:
+        async def fetch_archive(url: str) -> ParsedItem | None:
             async with semaphore:
                 try:
                     article_data = await self._parse_article_page(url)
@@ -317,8 +317,8 @@ class LentaParser(BaseParser):
         self,
         archive_url: str,
         max_pages: int,
-        categories: Optional[List[str]],
-    ) -> List[str]:
+        categories: list[str] | None,
+    ) -> list[str]:
         """Получение ссылок на статьи из архивной страницы."""
         all_urls = []
 
@@ -440,7 +440,7 @@ class LentaParser(BaseParser):
 
         return ""
 
-    def _extract_author(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_author(self, soup: BeautifulSoup) -> str | None:
         """Извлечение автора."""
         selectors = [
             "a.topic-authors__author",
@@ -465,7 +465,7 @@ class LentaParser(BaseParser):
 
         return None
 
-    def _extract_published_time(self, soup: BeautifulSoup) -> Optional[datetime]:
+    def _extract_published_time(self, soup: BeautifulSoup) -> datetime | None:
         """Извлечение даты публикации."""
         # Мета-теги
         meta_selectors = [
