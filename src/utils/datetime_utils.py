@@ -230,3 +230,28 @@ def format_for_display(dt: datetime, include_time: bool = True) -> str:
     if include_time:
         return dt.strftime("%d.%m.%Y %H:%M")
     return dt.strftime("%d.%m.%Y")
+
+
+def now_msk_aware() -> datetime:
+    """
+    Текущее время в MSK с часовым поясом (aware).
+    Использовать для запросов к БД с TIMESTAMP WITH TIME ZONE.
+    """
+    return datetime.now(MSK_TZ)
+
+
+def msk_naive_to_aware(naive_dt: datetime) -> datetime:
+    """
+    Преобразует naive MSK datetime в aware с часовым поясом MSK.
+
+    Args:
+        naive_dt: naive datetime, который считается MSK
+
+    Returns:
+        aware datetime с MSK таймзоной
+    """
+    if naive_dt is None:
+        return None
+    if naive_dt.tzinfo is not None:
+        return naive_dt.astimezone(MSK_TZ)
+    return naive_dt.replace(tzinfo=MSK_TZ)

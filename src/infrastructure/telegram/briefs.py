@@ -10,7 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from src.database.repositories.summary_repository import SummaryRepository
-from src.utils.datetime_utils import format_for_display, now_msk
+from src.utils.datetime_utils import now_msk_aware, msk_naive_to_aware
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,11 @@ class BriefHandlers:
                 except ValueError:
                     hours = 6
 
-            now_msk_time = now_msk()
-            period_start = now_msk_time - timedelta(hours=hours)
+            # Используем aware время для БД
+            now_msk = now_msk_aware()
+            period_start = now_msk - timedelta(hours=hours)
 
-            summaries = await self.summary_repo.get_for_period(period_start, now_msk_time, "hour")
+            summaries = await self.summary_repo.get_for_period(period_start, now_msk, "hour")
 
             if not summaries:
                 await update.message.reply_text(f"📭 Нет суммаризаций за последние {hours} часов.")
@@ -47,13 +48,16 @@ class BriefHandlers:
 
             for s in summaries[-12:]:
                 period_start_val = s["period_start"]
-                # Убеждаемся, что время в MSK
-                if period_start_val.tzinfo is None:
-                    period_start_val = period_start_val.replace(tzinfo=MSK_TZ)
-                else:
-                    period_start_val = period_start_val.astimezone(MSK_TZ)
+                period_end_val = s["period_end"]
 
-                time_str = period_start_val.strftime("%H:%M")
+                # Убеждаемся, что время в MSK для отображения
+                if period_end_val.tzinfo is None:
+                    period_end_val = period_end_val.replace(tzinfo=MSK_TZ)
+                else:
+                    period_end_val = period_end_val.astimezone(MSK_TZ)
+
+                # Используем period_end вместо period_start (конец часа)
+                time_str = period_end_val.strftime("%H:%M")
                 content = s["content"]
                 if isinstance(content, dict):
                     summary = content.get("summary", "Нет данных")
@@ -70,7 +74,6 @@ class BriefHandlers:
         query = update.callback_query
         await query.edit_message_text("📊 Генерирую сводку за 6 часов...")
 
-        # Создаём mock update
         class MockUpdate:
             def __init__(self, query):
                 self.effective_chat = query.message.chat
@@ -87,7 +90,7 @@ class BriefHandlers:
             "✏️ *Свой диапазон*\n\n" "Введите количество часов (от 1 до 168):\n\n" "Пример: `24`"
         )
         await query.answer()
-        return 3  # CUSTOM_BRIEF_STATE
+        return 3
 
     async def handle_custom_brief(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка произвольного диапазона."""
@@ -111,7 +114,8 @@ class BriefHandlers:
     async def daily_command(self, update, context=None):
         """Дневная сводка за вчера."""
         try:
-            yesterday = (now_msk() - timedelta(days=1)).replace(
+            now_msk = now_msk_aware()
+            yesterday = (now_msk - timedelta(days=1)).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
             today = yesterday + timedelta(days=1)
@@ -132,7 +136,9 @@ class BriefHandlers:
             content = s["content"]
 
             if isinstance(content, dict):
-                response = f"📅 *Сводка за {yesterday.strftime('%d.%m.%Y')}*\n\n"
+                # Форматируем дату в MSK для отображения
+                yesterday_msk = yesterday.astimezone(MSK_TZ)
+                response = f"📅 *Сводка за {yesterday_msk.strftime('%d.%m.%Y')}*\n\n"
                 response += f"📌 *Главные темы:*\n"
                 for topic in content.get("topics", [])[:5]:
                     response += f"• {topic}\n"

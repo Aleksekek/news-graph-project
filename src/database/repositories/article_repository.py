@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db, now_msk
+from src.utils.datetime_utils import format_for_db, now_msk_aware
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -193,7 +193,7 @@ class ArticleRepository:
         """Получить ежедневную статистику за последние N дней."""
         try:
             async with DatabasePoolManager.connection() as conn:
-                cutoff_date = now_msk() - timedelta(days=days)
+                cutoff_date = now_msk_aware() - timedelta(days=days)
                 rows = await conn.fetch(
                     """
                     SELECT EXTRACT(HOUR FROM published_at) as hour, COUNT(*) as count
@@ -229,8 +229,8 @@ class ArticleRepository:
         """
         try:
             async with DatabasePoolManager.connection() as conn:
-                # Текущее время в MSK (naive)
-                now = now_msk()
+                # Текущее время в MSK с таймзоной
+                now = now_msk_aware()
                 # 24 часа назад
                 cutoff = now - timedelta(hours=24)
 
@@ -238,13 +238,13 @@ class ArticleRepository:
                 rows = await conn.fetch(
                     """
                     SELECT 
-                        DATE_TRUNC('hour', published_at) as hour_start,
+                        DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow') as hour_start,
                         COUNT(*) as count
                     FROM raw_articles
                     WHERE published_at >= $1 
                         AND published_at <= $2
                         AND status != 'failed'
-                    GROUP BY DATE_TRUNC('hour', published_at)
+                    GROUP BY DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow')
                     ORDER BY hour_start ASC
                     """,
                     cutoff,
@@ -252,18 +252,22 @@ class ArticleRepository:
                 )
 
                 # Преобразуем результат в список кортежей (datetime, count)
-                # published_at уже в БД в MSK, так что никаких конвертаций не нужно
                 result = [(row["hour_start"], row["count"]) for row in rows]
 
                 # Создаём полную сетку из 24 часов (включая часы без статей)
                 full_result = []
                 for i in range(24):
-                    hour_start = cutoff + timedelta(hours=i)
-                    hour_start = hour_start.replace(minute=0, second=0, microsecond=0)
+                    hour_start = (cutoff + timedelta(hours=i)).replace(
+                        minute=0, second=0, microsecond=0
+                    )
+                    # Преобразуем в naive для единообразия
+                    hour_start_naive = hour_start.replace(tzinfo=None)
 
                     # Ищем есть ли данные для этого часа
-                    count = next((c for dt, c in result if dt == hour_start), 0)
-                    full_result.append((hour_start, count))
+                    count = next(
+                        (c for dt, c in result if dt.replace(tzinfo=None) == hour_start_naive), 0
+                    )
+                    full_result.append((hour_start_naive, count))
 
                 return full_result
 

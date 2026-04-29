@@ -40,13 +40,6 @@ def create_hourly_bar(count: int, max_count: int) -> str:
 def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     """
     Форматирует почасовую статистику для отображения.
-
-    Args:
-        stats: список кортежей (datetime начала часа, количество публикаций)
-               datetime уже в MSK
-
-    Returns:
-        Отформатированный текст
     """
     if not stats:
         return "❌ Нет данных для статистики"
@@ -58,8 +51,6 @@ def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     response += f"📈 Максимум: {max_count} публикаций\n\n"
 
     for dt, count in stats:
-        # dt уже в MSK
-        # Форматируем: "27.04 18:00" или "28.04 00:00"
         time_str = dt.strftime("%d.%m %H:00")
         bar = create_hourly_bar(count, max_count)
         formatted_count = f"{count:,}".replace(",", " ")

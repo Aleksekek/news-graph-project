@@ -52,9 +52,7 @@ class SummaryRepository:
                     completion_tokens,
                     cost_usd,
                 )
-                logger.info(
-                    f"Суммаризация сохранена: id={result['id']}, тип={period_type}"
-                )
+                logger.info(f"Суммаризация сохранена: id={result['id']}, тип={period_type}")
                 return result["id"]
         except Exception as e:
             logger.error(f"Ошибка сохранения суммаризации: {e}")
@@ -66,7 +64,14 @@ class SummaryRepository:
         end: datetime,
         period_type: Optional[str] = None,
     ) -> List[Dict]:
-        """Получает суммаризации за период."""
+        """
+        Получает суммаризации за период.
+
+        Args:
+            start: Начало периода (aware datetime с таймзоной)
+            end: Конец периода (aware datetime с таймзоной)
+            period_type: Тип периода (hour/day)
+        """
         try:
             async with DatabasePoolManager.connection() as conn:
                 query = """
