@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db, now_msk_aware
+from src.utils.datetime_utils import format_for_db, now_msk_aware, MSK_TZ
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -221,50 +221,54 @@ class ArticleRepository:
     async def get_hourly_stats_24h(self) -> List[tuple]:
         """
         Получает почасовую статистику за последние 24 часа (включая текущий неполный час).
-        Возвращает часы с датами в MSK.
+        Возвращает часы в MSK.
 
         Returns:
             Список кортежей: (datetime начала часа в MSK, количество статей)
-            datetime уже в MSK и округлён до начала часа
         """
         try:
             async with DatabasePoolManager.connection() as conn:
-                # Текущее время в MSK с таймзоной (используем нашу функцию)
+                # Текущее время в MSK
                 now = now_msk_aware()
-                # Округляем до начала текущего часа для нижней границы
-                current_hour_start = now.replace(minute=0, second=0, microsecond=0)
-                # Берём 24 часа назад от начала текущего часа
-                cutoff = current_hour_start - timedelta(hours=24)
+                # 24 часа назад
+                cutoff = now - timedelta(hours=24)
 
-                # Запрос с группировкой по часам
-                # Включаем текущий неполный час (published_at < now, а не < current_hour_start)
+                # Простой запрос без AT TIME ZONE, так как published_at уже с таймзоной
                 rows = await conn.fetch(
                     """
                     SELECT 
-                        DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow') as hour_start,
+                        DATE_TRUNC('hour', published_at) as hour_start,
                         COUNT(*) as count
                     FROM raw_articles
                     WHERE published_at >= $1 
-                        AND published_at < $2
+                        AND published_at <= $2
                         AND status != 'failed'
-                    GROUP BY DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow')
+                    GROUP BY DATE_TRUNC('hour', published_at)
                     ORDER BY hour_start ASC
                     """,
                     cutoff,
-                    now,  # используем now, а не current_hour_start, чтобы включить текущий час
+                    now,
                 )
 
-                # Преобразуем результат в словарь для быстрого доступа
-                stats_dict = {row["hour_start"]: row["count"] for row in rows}
+                # Преобразуем результат в словарь
+                stats_dict = {}
+                for row in rows:
+                    hour_start = row["hour_start"]
+                    # Конвертируем в MSK naive для единообразия
+                    if hour_start.tzinfo is not None:
+                        hour_start_msk = hour_start.astimezone(MSK_TZ).replace(tzinfo=None)
+                    else:
+                        hour_start_msk = hour_start
+                    stats_dict[hour_start_msk] = row["count"]
 
-                # Создаём полную сетку из 24 часов (включая текущий неполный час)
+                # Создаём полную сетку из 24 часов
                 full_result = []
                 for i in range(24):
-                    hour_start = cutoff + timedelta(hours=i)
-                    # Преобразуем в naive для единообразия
-                    hour_start_naive = hour_start.replace(tzinfo=None)
+                    hour_start = (
+                        (cutoff + timedelta(hours=i)).astimezone(MSK_TZ).replace(tzinfo=None)
+                    )
                     count = stats_dict.get(hour_start, 0)
-                    full_result.append((hour_start_naive, count))
+                    full_result.append((hour_start, count))
 
                 return full_result
 

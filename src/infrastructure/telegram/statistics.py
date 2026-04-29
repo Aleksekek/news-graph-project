@@ -40,30 +40,20 @@ def create_hourly_bar(count: int, max_count: int) -> str:
 def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
     """
     Форматирует почасовую статистику для отображения.
-    Текущий час помечается звёздочкой.
     """
     if not stats:
         return "❌ Нет данных для статистики"
 
     max_count = max(count for _, count in stats)
-    now = now_msk()
-    current_hour = now.hour
 
     response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
     response += f"📈 Максимум: {max_count} публикаций\n\n"
 
     for dt, count in stats:
         time_str = dt.strftime("%H:00")
-
-        # Помечаем текущий час
-        if dt.hour == current_hour:
-            time_str = f"🔄 {time_str}"
-
         bar = create_hourly_bar(count, max_count)
         formatted_count = f"{count:,}".replace(",", " ")
         response += f"• {time_str} {bar} {formatted_count}\n"
-
-    response += f"\n🔄 — текущий час (данные обновляются в реальном времени)"
 
     return response
 

@@ -137,14 +137,16 @@ class TestNewsTelegramBot:
 
         second_call = mock_update.callback_query.edit_message_text.call_args_list[1]
         response_text = second_call[0][0]
-        assert "Активность по часам" in response_text
-        # Проверяем только часы, без даты
+
+        # Проверяем наличие часов
         assert "10:00" in response_text
         assert "11:00" in response_text
         assert "12:00" in response_text
-        # Даты быть не должно
-        assert "28.04" not in response_text
         assert "Максимум: 30" in response_text
+
+        # Проверяем, что нет лишних символов
+        assert "🔄" not in response_text
+        assert "28.04" not in response_text
 
         mock_update.callback_query.answer.assert_called_once()
 
@@ -165,7 +167,6 @@ class TestNewsTelegramBot:
         await bot.handlers.stats_hourly(mock_update, Mock())
 
         # Проверяем, что после получения пустых данных показано сообщение
-        # (первый вызов - статус, второй - результат)
         second_call = mock_update.callback_query.edit_message_text.call_args_list[1]
         response_text = second_call[0][0]
         assert "нет данных" in response_text.lower() or "Нет данных" in response_text
@@ -361,13 +362,16 @@ class TestHandlersIntegration:
         assert mock_update.callback_query.edit_message_text.called
         call_args = mock_update.callback_query.edit_message_text.call_args[0][0]
 
-        # Проверяем наличие часов (без дат)
+        # Проверяем наличие часов без дат
         assert "00:00" in call_args
         assert "01:00" in call_args
+        assert "23:00" in call_args
         assert "Максимум:" in call_args
-        # Даты быть не должно
+
+        # Проверяем, что нет дат
         assert "28.04" not in call_args
         assert "27.04" not in call_args
+        assert "🔄" not in call_args
 
     @pytest.mark.asyncio
     async def test_stats_overall_integration(self, handlers):

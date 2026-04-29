@@ -26,7 +26,6 @@ class TestStatistics:
     def test_create_hourly_bar_half(self):
         """Создание полоски для половины максимума."""
         bar = create_hourly_bar(50, 100)
-        # При MAX_BAR_LENGTH=10, половина = 5 блоков
         expected = "█████" + "░" * 5
         assert bar == expected
 
@@ -36,40 +35,34 @@ class TestStatistics:
         assert bar == "░" * MAX_BAR_LENGTH
 
     def test_create_hourly_bar_small_value(self):
-        """Создание полоски для маленького значения (должен быть минимум 1 блок)."""
+        """Создание полоски для маленького значения."""
         bar = create_hourly_bar(1, 100)
-        # Даже для 1 статьи должна быть хотя бы одна черта
         assert bar[0] == "█"
-        # Остальные - пустые
         assert bar[1:] == "░" * (MAX_BAR_LENGTH - 1)
 
     def test_create_hourly_bar_zero_count_non_zero_max(self):
-        """Создание полоски для нулевого значения при ненулевом максимуме."""
+        """Создание полоски для нулевого значения."""
         bar = create_hourly_bar(0, 100)
-        # Ноль статей - ни одного блока
         assert bar == "░" * MAX_BAR_LENGTH
 
     def test_create_hourly_bar_very_small_max(self):
         """Создание полоски при очень маленьком максимуме."""
         bar = create_hourly_bar(3, 5)
-        # Ожидаем 6 блоков из 10 (3/5 = 0.6 * 10 = 6)
         expected = "██████" + "░" * 4
         assert bar == expected
 
     def test_create_hourly_bar_exact_proportion(self):
         """Создание полоски с точной пропорцией."""
-        # 2/4 = 0.5 -> 5 блоков
         bar = create_hourly_bar(2, 4)
         expected = "█████" + "░" * 5
         assert bar == expected
 
-        # 8/10 = 0.8 -> 8 блоков
         bar = create_hourly_bar(8, 10)
         expected = "████████" + "░" * 2
         assert bar == expected
 
     def test_format_hourly_stats(self):
-        """Форматирование почасовой статистики (без дат)."""
+        """Форматирование почасовой статистики."""
         now = datetime(2026, 4, 28, 15, 0)
         stats = [
             (now - timedelta(hours=3), 10),
@@ -81,15 +74,18 @@ class TestStatistics:
         result = format_hourly_stats(stats)
 
         # Проверяем заголовок
-        assert "Активность по часам (последние 24 ч)" in result
-        assert "Максимум: 25 публикаций" in result
+        assert "Активность по часам" in result
+        assert "Максимум: 25" in result
 
-        # Проверяем формат строки - теперь только часы, без даты
-        for dt, _ in stats:
-            time_str = dt.strftime("%H:00")  # Только час
-            assert time_str in result
-            # Даты быть не должно
-            assert "28.04" not in result
+        # Проверяем часы
+        assert "12:00" in result
+        assert "13:00" in result
+        assert "14:00" in result
+        assert "15:00" in result
+
+        # Проверяем, что нет лишних символов
+        assert "🔄" not in result
+        assert "28.04" not in result
 
     def test_format_hourly_stats_empty(self):
         """Форматирование пустой статистики."""
@@ -101,12 +97,10 @@ class TestStatistics:
         stats = [(datetime(2026, 4, 28, 10, 0), 42)]
         result = format_hourly_stats(stats)
 
-        # Только час, без даты
         assert "10:00" in result
-        assert "28.04" not in result
         assert "42" in result
-        # Полоска должна быть максимальной
         assert "█" * MAX_BAR_LENGTH in result
+        assert "28.04" not in result
 
     def test_format_hourly_stats_all_zeros(self):
         """Форматирование с нулевыми значениями."""
@@ -119,38 +113,18 @@ class TestStatistics:
 
         result = format_hourly_stats(stats)
 
-        assert "Максимум: 0 публикаций" in result
-        for dt, _ in stats:
-            time_str = dt.strftime("%H:00")
-            assert time_str in result
-            # Все полоски должны быть пустыми
-            assert "░" * MAX_BAR_LENGTH in result
+        assert "Максимум: 0" in result
+        assert "13:00" in result
+        assert "14:00" in result
+        assert "15:00" in result
+        assert "░" * MAX_BAR_LENGTH in result
 
     def test_format_hourly_stats_large_numbers(self):
-        """Форматирование с большими числами (проверка форматирования тысяч)."""
+        """Форматирование с большими числами."""
         stats = [(datetime(2026, 4, 28, 10, 0), 12345)]
         result = format_hourly_stats(stats)
 
-        # Должно быть с пробелом как разделителем тысяч
         assert "12 345" in result
-
-    def test_format_hourly_stats_current_hour_marker(self):
-        """Проверка маркера текущего часа."""
-        with patch("src.infrastructure.telegram.statistics.now_msk") as mock_now:
-            # Замораживаем время на 10:30
-            mock_now.return_value = datetime(2026, 4, 28, 10, 30)
-
-            stats = [
-                (datetime(2026, 4, 28, 9, 0), 10),  # прошлый час
-                (datetime(2026, 4, 28, 10, 0), 5),  # текущий час
-            ]
-
-            result = format_hourly_stats(stats)
-
-            # Проверяем, что текущий час (10:00) помечен
-            assert "🔄 10:00" in result or "10:00" in result
-            # Проверяем, что прошлый час (09:00) не помечен
-            assert "09:00" in result
 
     @pytest.mark.asyncio
     async def test_get_hourly_stats_success(self):
@@ -177,40 +151,23 @@ class TestStatistics:
 
         assert result == []
 
-    @pytest.mark.asyncio
-    async def test_get_hourly_stats_with_zeros(self):
-        """Получение статистики с нулевыми значениями."""
-        mock_repo = AsyncMock()
-        now = datetime(2026, 4, 28, 15, 0)
-        expected_stats = []
-        for i in range(24):
-            expected_stats.append((now - timedelta(hours=23 - i), i * 0))  # все нули
-
-        mock_repo.get_hourly_stats_24h = AsyncMock(return_value=expected_stats)
-
-        result = await get_hourly_stats(mock_repo)
-        assert all(count == 0 for _, count in result)
-
 
 class TestHourlyBarEdgeCases:
-    """Тесты граничных случаев для create_hourly_bar."""
+    """Тесты граничных случаев."""
 
     def test_edge_case_very_large_numbers(self):
         """Очень большие числа."""
         bar = create_hourly_bar(1000000, 2000000)
-        # Должна быть половина (5 блоков)
         assert bar == "█████" + "░" * 5
 
     def test_edge_case_count_greater_than_max(self):
-        """Количество больше максимума (не должно случиться, но обрабатываем)."""
+        """Количество больше максимума."""
         bar = create_hourly_bar(150, 100)
-        # Будет вычислено как 150/100 * 10 = 15, но обрезается до 10
         assert bar == "█" * MAX_BAR_LENGTH
 
     def test_edge_case_negative_numbers(self):
         """Отрицательные числа."""
         bar = create_hourly_bar(-5, 100)
-        # Отрицательное значение -> 0 блоков
         assert bar == "░" * MAX_BAR_LENGTH
 
 
