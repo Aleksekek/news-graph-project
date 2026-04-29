@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from src.database.repositories.article_repository import ArticleRepository
-from src.utils.datetime_utils import format_for_display, now_msk
+from src.utils.datetime_utils import now_msk
 
 logger = logging.getLogger(__name__)
 
@@ -15,16 +15,7 @@ MAX_BAR_LENGTH = 10
 
 
 def create_hourly_bar(count: int, max_count: int) -> str:
-    """
-    Создаёт текстовую полоску для гистограммы.
-
-    Args:
-        count: текущее значение
-        max_count: максимальное значение
-
-    Returns:
-        Строка с полоской (например, "████░░░░░░")
-    """
+    """Создаёт текстовую полоску для гистограммы."""
     if max_count == 0:
         return "░" * MAX_BAR_LENGTH
 
@@ -38,17 +29,11 @@ def create_hourly_bar(count: int, max_count: int) -> str:
 
 
 def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
-    """
-    Форматирует почасовую статистику для отображения.
-    """
-    logger.info(f"format_hourly_stats: получено {len(stats)} часов")
-    
+    """Форматирует почасовую статистику для отображения."""
     if not stats:
-        logger.warning("format_hourly_stats: stats is empty")
-        return "❌ Нет данных для статистики"
+        return "❌ Нет данных за последние 24 часа"
 
     max_count = max(count for _, count in stats)
-    logger.info(f"format_hourly_stats: max_count={max_count}")
 
     response = "🕐 *Активность по часам (последние 24 ч)*\n\n"
     response += f"📈 Максимум: {max_count} публикаций\n\n"
@@ -63,28 +48,10 @@ def format_hourly_stats(stats: List[Tuple[datetime, int]]) -> str:
 
 
 async def get_hourly_stats(repo: ArticleRepository) -> List[Tuple[datetime, int]]:
-    """
-    Получает почасовую статистику за последние 24 часа.
-
-    Args:
-        repo: репозиторий статей
-
-    Returns:
-        Список кортежей (datetime начала часа в MSK, количество статей)
-    """
-    logger.info("get_hourly_stats: вызываю repo.get_hourly_stats_24h()")
-    result = await repo.get_hourly_stats_24h()
-    logger.info(f"get_hourly_stats: получил {len(result)} записей")
-    
-    # Логируем первые 5 записей для проверки
-    if result:
-        logger.info(f"get_hourly_stats: первые 5 записей: {result[:5]}")
-        # Проверяем, есть ли ненулевые значения
-        non_zero = [(dt, c) for dt, c in result if c > 0]
-        logger.info(f"get_hourly_stats: ненулевых записей: {len(non_zero)}")
-        if non_zero:
-            logger.info(f"get_hourly_stats: первая ненулевая: {non_zero[0]}")
-    else:
-        logger.warning("get_hourly_stats: результат пустой!")
-    
-    return result
+    """Получает почасовую статистику за последние 24 часа."""
+    try:
+        result = await repo.get_hourly_stats_24h()
+        return result if result else []
+    except Exception as e:
+        logger.error(f"Ошибка в get_hourly_stats: {e}")
+        return []
