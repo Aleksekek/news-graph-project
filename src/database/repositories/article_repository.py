@@ -221,29 +221,23 @@ class ArticleRepository:
     async def get_hourly_stats_24h(self) -> List[tuple]:
         """
         Получает почасовую статистику за последние 24 часа (включая текущий неполный час).
-        Возвращает часы в MSK.
-
-        Returns:
-            Список кортежей: (datetime начала часа в MSK, количество статей)
         """
         try:
             async with DatabasePoolManager.connection() as conn:
-                # Текущее время в MSK
+                # Текущее время в MSK с таймзоной
                 now = now_msk_aware()
-                # 24 часа назад
                 cutoff = now - timedelta(hours=24)
 
-                # Простой запрос без AT TIME ZONE, так как published_at уже с таймзоной
                 rows = await conn.fetch(
                     """
                     SELECT 
-                        DATE_TRUNC('hour', published_at) as hour_start,
+                        DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow') as hour_start,
                         COUNT(*) as count
                     FROM raw_articles
                     WHERE published_at >= $1 
                         AND published_at <= $2
                         AND status != 'failed'
-                    GROUP BY DATE_TRUNC('hour', published_at)
+                    GROUP BY DATE_TRUNC('hour', published_at AT TIME ZONE 'Europe/Moscow')
                     ORDER BY hour_start ASC
                     """,
                     cutoff,
@@ -251,29 +245,21 @@ class ArticleRepository:
                 )
 
                 # Преобразуем результат в словарь
-                stats_dict = {}
-                for row in rows:
-                    hour_start = row["hour_start"]
-                    # Конвертируем в MSK naive для единообразия
-                    if hour_start.tzinfo is not None:
-                        hour_start_msk = hour_start.astimezone(MSK_TZ).replace(tzinfo=None)
-                    else:
-                        hour_start_msk = hour_start
-                    stats_dict[hour_start_msk] = row["count"]
+                stats_dict = {row["hour_start"]: row["count"] for row in rows}
 
                 # Создаём полную сетку из 24 часов
                 full_result = []
                 for i in range(24):
-                    hour_start = (
-                        (cutoff + timedelta(hours=i)).astimezone(MSK_TZ).replace(tzinfo=None)
-                    )
+                    hour_start = cutoff + timedelta(hours=i)
+                    # Получаем naive datetime для единообразия
+                    hour_start_naive = hour_start.replace(tzinfo=None)
                     count = stats_dict.get(hour_start, 0)
-                    full_result.append((hour_start, count))
+                    full_result.append((hour_start_naive, count))
 
                 return full_result
 
         except Exception as e:
-            logger.error(f"Ошибка получения почасовой статистики: {e}")
+            logger.error(f"Ошибка получения почасовой статистики: {e}", exc_info=True)
             return []
 
     @staticmethod
