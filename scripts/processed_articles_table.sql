@@ -16,6 +16,9 @@ CREATE TABLE processed_articles (
     sentiment_label VARCHAR(20),
     embedding vector(384),
     
+    -- Флаги этапов обработки: {"ner": true, "sentiment": false, "embedding": false}
+    processing_flags JSONB DEFAULT '{}',
+
     -- Временные метки
     published_at TIMESTAMP WITH TIME ZONE NOT NULL,
     processed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
