@@ -4,8 +4,9 @@
 """
 
 import asyncio
+import contextlib
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional, Set
 
 import asyncpg
 from asyncpg.pool import Pool
@@ -22,9 +23,9 @@ class DatabasePoolManager:
     Технический класс, не содержит бизнес-логики.
     """
 
-    _pool: Optional[Pool] = None
-    _semaphore: Optional[asyncio.Semaphore] = None
-    _heartbeat_tasks: Set[asyncio.Task] = set()
+    _pool: Pool | None = None
+    _semaphore: asyncio.Semaphore | None = None
+    _heartbeat_tasks: set[asyncio.Task] = set()
 
     @classmethod
     async def get_pool(cls) -> Pool:
@@ -125,10 +126,8 @@ class DatabasePoolManager:
         await asyncio.sleep(1.0)
 
         if cls._pool:
-            try:
+            with contextlib.suppress(Exception):
                 await cls._pool.close()
-            except Exception:
-                pass
 
         cls._pool = None
         cls._semaphore = None

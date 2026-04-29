@@ -2,7 +2,6 @@
 Репозиторий для работы с article_entities (связи статья ↔ сущность).
 """
 
-from typing import List, Tuple
 
 import asyncpg
 
@@ -21,7 +20,7 @@ class ArticleEntityRepository:
     async def save_batch(
         self,
         processed_article_id: int,
-        entity_links: List[Tuple[int, ExtractedEntity]],
+        entity_links: list[tuple[int, ExtractedEntity]],
     ) -> int:
         """
         Пакетно сохраняет связи статья-сущность.
