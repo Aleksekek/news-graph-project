@@ -50,7 +50,7 @@ class ScheduleConfig:
                 name="Ночной парсинг Lenta.ru",
                 cron="0 0-7,22,23 * * *",
                 enabled=True,
-                kwargs={"limit": 15, "categories": LENTA_CATEGORIES},
+                kwargs={"limit": 25, "categories": LENTA_CATEGORIES},
             ),
             # TInvest: сдвинут на 7 минут (днем каждые 15 мин, ночью каждые 30 мин)
             "tinvest_day": TaskConfig(
