@@ -226,24 +226,28 @@ class Handlers:
         await query.answer()
 
     async def stats_hourly(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Почасовая статистика (последние 24 часа)."""
+        """Почасовая статистика (последние 24 часа, плавающее окно)."""
         query = update.callback_query
+        await query.edit_message_text("📊 Собираю почасовую статистику...")
 
         try:
-            await query.edit_message_text("📊 Собираю почасовую статистику...")
-
+            logger.info("stats_hourly: вызываю get_hourly_stats")
             hourly_stats = await get_hourly_stats(self.article_repo)
-
+            logger.info(f"stats_hourly: получил {len(hourly_stats)} записей")
+            
             if not hourly_stats:
+                logger.warning("stats_hourly: hourly_stats is empty")
                 await query.edit_message_text(
                     "📊 За последние 24 часа нет данных о публикациях.",
                     reply_markup=get_back_button("menu_stats"),
                 )
                 await query.answer()
                 return
-
+                
+            logger.info(f"stats_hourly: формирую ответ")
             response = format_hourly_stats(hourly_stats)
-
+            logger.info(f"stats_hourly: ответ сформирован, длина={len(response)}")
+            
             await query.edit_message_text(
                 response,
                 reply_markup=get_back_button("menu_stats"),
@@ -251,14 +255,8 @@ class Handlers:
             )
 
         except Exception as e:
-            logger.error(f"Ошибка stats_hourly: {e}")
-            try:
-                await query.edit_message_text(
-                    "❌ Ошибка получения статистики. Попробуйте позже.",
-                    reply_markup=get_back_button("menu_stats"),
-                )
-            except:
-                pass
+            logger.error(f"Ошибка stats_hourly: {e}", exc_info=True)
+            await query.edit_message_text("❌ Ошибка получения статистики")
 
         await query.answer()
 
