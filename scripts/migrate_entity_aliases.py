@@ -101,14 +101,20 @@ SEED_ALIASES: list[tuple[str, str | None, str, str]] = [
     # ===== ВСУ / Армия Украины =====
     ("ВСУ",                         "organization", "Вооружённые силы Украины",             "organization"),
     ("Украина (ВСУ)",               "organization", "Вооружённые силы Украины",             "organization"),
+    ("Украина (ВСУ)",               "location", "Вооружённые силы Украины",             "organization"),
     ("Вооруженные силы Украина",    "organization", "Вооружённые силы Украины",             "organization"),
     ("Вооруженные силы Украина (ВСУ)", "organization", "Вооружённые силы Украины",          "organization"),
     ("Вооружённые силы Украина",    "organization", "Вооружённые силы Украины",             "organization"),
+    ("Вооружённые силы Украины",    "organization", "Вооружённые силы Украины",             "organization"),
 
     # ===== ЕВРОПЕЙСКИЙ СОЮЗ =====
     ("ЕС",                          "organization", "Европейский союз",                     "organization"),
     ("Евросоюз",                    "organization", "Европейский союз",                     "organization"),
     ("Европейский союз (ЕС)",       "organization", "Европейский союз",                     "organization"),
+    ("ЕС",                          "location", "Европейский союз",                     "organization"),
+    ("Европейский союз",       "location", "Европейский союз",                     "organization"),
+    ("Европейский союз (ЕС)",       "location", "Европейский союз",                     "organization"),
+    ("Евросоюз",                    "location", "Европейский союз",                     "organization"),
 
     # ===== МОСКОВСКАЯ БИРЖА =====
     ("Мосбиржа",                    "organization", "Московская биржа",                     "organization"),

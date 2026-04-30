@@ -103,7 +103,9 @@ class TestEntityRepository:
 
     @pytest.mark.asyncio
     async def test_upsert_new_entity_returns_id_and_is_new_true(self, repo, mock_conn, entity):
-        mock_conn.fetchrow.return_value = {"id": 1, "is_new": True}
+        # 1-й fetchrow — alias lookup (None = алиас не найден)
+        # 2-й fetchrow — INSERT entities
+        mock_conn.fetchrow.side_effect = [None, {"id": 1, "is_new": True}]
 
         with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
             mock_pool.connection.return_value.__aenter__.return_value = mock_conn
@@ -115,7 +117,7 @@ class TestEntityRepository:
 
     @pytest.mark.asyncio
     async def test_upsert_existing_entity_returns_id_and_is_new_false(self, repo, mock_conn, entity):
-        mock_conn.fetchrow.return_value = {"id": 99, "is_new": False}
+        mock_conn.fetchrow.side_effect = [None, {"id": 99, "is_new": False}]
 
         with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
             mock_pool.connection.return_value.__aenter__.return_value = mock_conn
@@ -127,16 +129,34 @@ class TestEntityRepository:
 
     @pytest.mark.asyncio
     async def test_upsert_passes_normalized_name_and_type(self, repo, mock_conn, entity):
-        mock_conn.fetchrow.return_value = {"id": 5, "is_new": True}
+        mock_conn.fetchrow.side_effect = [None, {"id": 5, "is_new": True}]
 
         with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
             mock_pool.connection.return_value.__aenter__.return_value = mock_conn
 
             await repo.upsert(entity)
 
-        args = mock_conn.fetchrow.call_args[0]
+        # call_args_list[1] — второй вызов fetchrow (INSERT entities)
+        args = mock_conn.fetchrow.call_args_list[1][0]
         assert "Сбербанк" in args[1]       # normalized_name
         assert "organization" in args[2]   # type
+
+    @pytest.mark.asyncio
+    async def test_upsert_resolves_alias(self, repo, mock_conn, entity):
+        # Алиас найден: Сбербанк → Сбер
+        alias_row = {"canonical_name": "Сбер", "canonical_type": "organization"}
+        mock_conn.fetchrow.side_effect = [alias_row, {"id": 7, "is_new": False}]
+
+        with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
+            mock_pool.connection.return_value.__aenter__.return_value = mock_conn
+
+            entity_id, _ = await repo.upsert(entity)
+
+        assert entity_id == 7
+        # Второй fetchrow должен использовать каноническое имя
+        args = mock_conn.fetchrow.call_args_list[1][0]
+        assert "Сбер" in args[1]           # canonical_name подставлено
+        assert "organization" in args[2]
 
 
 class TestArticleEntityRepository:
