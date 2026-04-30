@@ -6,7 +6,7 @@
 
 ```bash
 # Клонирование
-git clone https://github.com/yourusername/news_graph_project.git
+git clone https://github.com/Aleksekek/news-graph-project.git
 cd news_graph_project
 
 # Настройка
