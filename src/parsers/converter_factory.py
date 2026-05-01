@@ -4,7 +4,10 @@
 
 
 from src.core.exceptions import SourceNotFoundError
+from src.parsers.interfax.converter import InterfaxConverter
 from src.parsers.lenta.converter import LentaConverter
+from src.parsers.rbc.converter import RbcConverter
+from src.parsers.tass.converter import TassConverter
 from src.parsers.tinvest.converter import TInvestConverter
 
 
@@ -14,6 +17,9 @@ class ConverterFactory:
     _converters: dict[str, type] = {
         "lenta": LentaConverter,
         "tinvest": TInvestConverter,
+        "interfax": InterfaxConverter,
+        "tass": TassConverter,
+        "rbc": RbcConverter,
     }
 
     @classmethod

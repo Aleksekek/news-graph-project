@@ -25,20 +25,18 @@ async def run_parse_task(source: str, **kwargs):
     Задача парсинга для планировщика.
 
     Args:
-        source: Имя источника ("lenta" или "tinvest")
-        **kwargs: Параметры для парсера (limit, categories, tickers и т.д.)
+        source: Имя источника
+        **kwargs: Параметры для парсера (limit, categories, sections, tickers и т.д.)
     """
     logger.info(f"🔄 Запуск парсинга {source} с параметрами: {kwargs}")
 
     use_case = ParseSourceUseCase()
 
     try:
-        # Преобразуем строковые параметры в списки если нужно
-        if source == "lenta" and isinstance(kwargs.get("categories"), str):
-            kwargs["categories"] = [c.strip() for c in kwargs["categories"].split(",") if c.strip()]
-
-        if source == "tinvest" and isinstance(kwargs.get("tickers"), str):
-            kwargs["tickers"] = [t.strip() for t in kwargs["tickers"].split(",") if t.strip()]
+        # Преобразуем строковые параметры списков из YAML в list[str]
+        for key in ("categories", "tickers", "sections"):
+            if isinstance(kwargs.get(key), str):
+                kwargs[key] = [v.strip() for v in kwargs[key].split(",") if v.strip()]
 
         # Выполняем парсинг
         stats = await use_case.execute(source_name=source, **kwargs)
@@ -58,17 +56,15 @@ def setup_scheduler() -> AsyncIOScheduler:
     """Настройка и запуск планировщика."""
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
 
+    known_sources = ["lenta", "tinvest", "interfax", "tass", "rbc"]
+
     for task_id, task in schedule_config.tasks.items():
         if not task.enabled:
             logger.info(f"Задача {task_id} отключена")
             continue
 
-        # Определяем источник по имени задачи
-        if "lenta" in task_id:
-            source = "lenta"
-        elif "tinvest" in task_id:
-            source = "tinvest"
-        else:
+        source = next((s for s in known_sources if task_id.startswith(s)), None)
+        if source is None:
             logger.warning(f"Неизвестный источник для задачи {task_id}")
             continue
 

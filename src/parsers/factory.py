@@ -8,7 +8,10 @@ from src.core.constants import SOURCE_IDS
 from src.core.exceptions import ConfigurationError, SourceNotFoundError
 from src.core.models import ParserConfig
 from src.parsers.base import BaseParser
+from src.parsers.interfax.parser import InterfaxParser
 from src.parsers.lenta.parser import LentaParser
+from src.parsers.rbc.parser import RbcParser
+from src.parsers.tass.parser import TassParser
 from src.parsers.tinvest.parser import TInvestParser
 
 
@@ -22,7 +25,12 @@ class ParserFactory:
     _parsers_registry: dict[str, type] = {
         "lenta": LentaParser,
         "tinvest": TInvestParser,
+        "interfax": InterfaxParser,
+        "tass": TassParser,
+        "rbc": RbcParser,
     }
+
+    _default_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
     # Конфигурации по умолчанию для каждого источника
     _default_configs: dict[str, dict[str, Any]] = {
@@ -38,6 +46,24 @@ class ParserFactory:
             "max_retries": 3,
             "timeout": 30,
             "user_agent": "TInvestParser/1.0",
+        },
+        "interfax": {
+            "request_delay": 1.0,
+            "max_retries": 3,
+            "timeout": 30,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        "tass": {
+            "request_delay": 1.0,
+            "max_retries": 3,
+            "timeout": 30,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        "rbc": {
+            "request_delay": 1.5,
+            "max_retries": 3,
+            "timeout": 30,
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         },
     }
 

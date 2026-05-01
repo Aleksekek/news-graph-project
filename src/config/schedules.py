@@ -65,6 +65,45 @@ class ScheduleConfig:
                 enabled=True,  # и так до 7:37
                 kwargs={"limit": 25, "tickers": TINVEST_TICKERS},
             ),
+            # Interfax: сдвиг +5 мин (каждые 30 мин днём, 60 мин ночью)
+            "interfax_day": TaskConfig(
+                name="Дневной парсинг Интерфакс (08:00-22:00)",
+                cron="5,35 8-21 * * *",
+                enabled=True,
+                kwargs={"limit": 30, "sections": ["main", "russia", "business"]},
+            ),
+            "interfax_night": TaskConfig(
+                name="Ночной парсинг Интерфакс",
+                cron="5 0-7,22,23 * * *",
+                enabled=True,
+                kwargs={"limit": 25, "sections": ["main"]},
+            ),
+            # ТАСС: сдвиг +10 мин
+            "tass_day": TaskConfig(
+                name="Дневной парсинг ТАСС (08:00-22:00)",
+                cron="10,40 8-21 * * *",
+                enabled=True,
+                kwargs={"limit": 30},
+            ),
+            "tass_night": TaskConfig(
+                name="Ночной парсинг ТАСС",
+                cron="10 0-7,22,23 * * *",
+                enabled=True,
+                kwargs={"limit": 25},
+            ),
+            # РБК: сдвиг +15 мин (full.rss отдаёт только 20 последних — лимит 20)
+            "rbc_day": TaskConfig(
+                name="Дневной парсинг РБК (08:00-22:00)",
+                cron="15,45 8-21 * * *",
+                enabled=True,
+                kwargs={"limit": 20},
+            ),
+            "rbc_night": TaskConfig(
+                name="Ночной парсинг РБК",
+                cron="15 0-7,22,23 * * *",
+                enabled=True,
+                kwargs={"limit": 20},
+            ),
         }
 
         # Пробуем загрузить из YAML

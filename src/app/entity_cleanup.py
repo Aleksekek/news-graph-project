@@ -110,14 +110,15 @@ async def apply_aliases_to_db(aliases: list[dict], type_fixes: list[dict]) -> in
 
     async with DatabasePoolManager.connection() as conn:
         existing = await conn.fetch(
-            "SELECT lower(canonical_name) AS cn FROM entity_aliases WHERE canonical_type != 'discard'"
+            "SELECT lower(canonical_name) AS cn, canonical_type AS ct "
+            "FROM entity_aliases WHERE canonical_type != 'discard'"
         )
-        existing_canonicals = {r["cn"] for r in existing}
+        existing_canonicals = {(r["cn"], r["ct"]) for r in existing}
 
         rows = [
             (v["alias_name"], v["alias_type"], v["canonical_name"], v["canonical_type"])
             for v in merged.values()
-            if v["alias_name"].lower() not in existing_canonicals
+            if (v["alias_name"].lower(), v["alias_type"]) not in existing_canonicals
         ]
         if not rows:
             return 0

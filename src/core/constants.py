@@ -6,6 +6,9 @@
 SOURCE_IDS = {
     "tinvest": 1,
     "lenta": 2,
+    "interfax": 3,
+    "tass": 4,
+    "rbc": 5,
 }
 
 # Категории Lenta.ru по умолчанию
