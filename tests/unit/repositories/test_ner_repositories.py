@@ -142,6 +142,20 @@ class TestEntityRepository:
         assert "organization" in args[2]   # type
 
     @pytest.mark.asyncio
+    async def test_upsert_skips_discard_entity(self, repo, mock_conn, entity):
+        discard_row = {"canonical_name": "Сбербанк", "canonical_type": "discard"}
+        mock_conn.fetchrow.return_value = discard_row
+
+        with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
+            mock_pool.connection.return_value.__aenter__.return_value = mock_conn
+
+            entity_id, is_new = await repo.upsert(entity)
+
+        assert entity_id is None
+        assert is_new is False
+        assert mock_conn.fetchrow.call_count == 1  # INSERT не вызывался
+
+    @pytest.mark.asyncio
     async def test_upsert_resolves_alias(self, repo, mock_conn, entity):
         # Алиас найден: Сбербанк → Сбер
         alias_row = {"canonical_name": "Сбер", "canonical_type": "organization"}

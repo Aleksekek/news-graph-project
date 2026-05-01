@@ -1,17 +1,18 @@
-.PHONY: help install build up down logs logs-parser logs-summarizer logs-bot clean test
+.PHONY: help install build up down logs logs-parser logs-summarizer logs-ner logs-bot clean test
 
 help:
 	@echo "Доступные команды:"
-	@echo "  install      - Установка зависимостей"
-	@echo "  build        - Сборка Docker образов"
-	@echo "  up           - Запуск всех сервисов"
-	@echo "  down         - Остановка всех сервисов"
-	@echo "  logs         - Просмотр логов всех сервисов"
-	@echo "  logs-parser  - Логи парсера"
+	@echo "  install         - Установка зависимостей"
+	@echo "  build           - Сборка Docker образов"
+	@echo "  up              - Запуск всех сервисов"
+	@echo "  down            - Остановка всех сервисов"
+	@echo "  logs            - Просмотр логов всех сервисов"
+	@echo "  logs-parser     - Логи парсера"
 	@echo "  logs-summarizer - Логи суммаризатора"
-	@echo "  logs-bot     - Логи бота"
-	@echo "  clean        - Остановка и очистка"
-	@echo "  test         - Запуск тестов"
+	@echo "  logs-ner        - Логи NER-сервиса"
+	@echo "  logs-bot        - Логи бота"
+	@echo "  clean           - Остановка и очистка"
+	@echo "  test            - Запуск тестов"
 
 install:
 	pip install -r requirements.txt
@@ -33,6 +34,9 @@ logs-parser:
 
 logs-summarizer:
 	docker-compose logs -f summarizer
+
+logs-ner:
+	docker-compose logs -f ner
 
 logs-bot:
 	docker-compose logs -f bot

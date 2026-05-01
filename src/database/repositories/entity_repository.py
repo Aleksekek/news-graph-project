@@ -16,10 +16,11 @@ class EntityRepository:
     """CRUD для entities."""
 
     @async_retry(exceptions=(asyncpg.exceptions.PostgresError,), max_attempts=3, delay=1.0)
-    async def upsert(self, entity: ExtractedEntity) -> tuple[int, bool]:
+    async def upsert(self, entity: ExtractedEntity) -> tuple[int | None, bool]:
         """
         Вставляет новую сущность или возвращает id существующей.
         Перед вставкой проверяет entity_aliases: если имя — алиас, подставляет каноническое.
+        Если алиас имеет canonical_type='discard', возвращает (None, False) — сущность пропускается.
         Возвращает (entity_id, is_new).
         """
         async with DatabasePoolManager.connection() as conn:
@@ -39,6 +40,9 @@ class EntityRepository:
 
             resolved_name = alias["canonical_name"] if alias else entity.normalized_name[:500]
             resolved_type = alias["canonical_type"] if alias else entity.entity_type
+
+            if resolved_type == "discard":
+                return None, False
 
             # ON CONFLICT DO UPDATE нужен, чтобы RETURNING всегда возвращал id.
             row = await conn.fetchrow(

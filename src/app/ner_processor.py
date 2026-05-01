@@ -93,6 +93,8 @@ class NERProcessor:
         n_new = 0
         for entity in entities:
             entity_id, is_new = await self.entity_repo.upsert(entity)
+            if entity_id is None:
+                continue
             if is_new:
                 n_new += 1
             entity_links.append((entity_id, entity))
