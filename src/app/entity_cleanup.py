@@ -30,17 +30,9 @@ CHUNK_SIZE = 20
 ENTITY_TYPES = ("person", "organization", "location")
 
 _UPSERT_SQL = """
-WITH upd AS (
-    UPDATE entity_aliases
-       SET canonical_name = $3,
-           canonical_type = $4
-     WHERE alias_name = $1
-       AND alias_type IS NOT DISTINCT FROM $2
-     RETURNING id
-)
 INSERT INTO entity_aliases (alias_name, alias_type, canonical_name, canonical_type)
-SELECT $1, $2, $3, $4
-WHERE NOT EXISTS (SELECT 1 FROM upd);
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (alias_name, COALESCE(alias_type, '')) DO NOTHING;
 """
 
 
@@ -96,6 +88,8 @@ async def apply_aliases_to_db(aliases: list[dict], type_fixes: list[dict]) -> in
     """
     Применяет алиасы и исправления типов к entity_aliases.
     aliases имеют приоритет над type_fixes для одного и того же ключа.
+    Не добавляет строки, где alias_name уже является canonical_name (защита от циклов).
+    Не перезаписывает существующие алиасы.
     Возвращает количество применённых записей.
     """
     merged: dict[tuple, dict] = {}
@@ -114,11 +108,19 @@ async def apply_aliases_to_db(aliases: list[dict], type_fixes: list[dict]) -> in
     if not merged:
         return 0
 
-    rows = [
-        (v["alias_name"], v["alias_type"], v["canonical_name"], v["canonical_type"])
-        for v in merged.values()
-    ]
     async with DatabasePoolManager.connection() as conn:
+        existing = await conn.fetch(
+            "SELECT lower(canonical_name) AS cn FROM entity_aliases WHERE canonical_type != 'discard'"
+        )
+        existing_canonicals = {r["cn"] for r in existing}
+
+        rows = [
+            (v["alias_name"], v["alias_type"], v["canonical_name"], v["canonical_type"])
+            for v in merged.values()
+            if v["alias_name"].lower() not in existing_canonicals
+        ]
+        if not rows:
+            return 0
         await conn.executemany(_UPSERT_SQL, rows)
     return len(rows)
 
