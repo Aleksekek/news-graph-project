@@ -110,26 +110,3 @@ CREATE INDEX idx_processed_topic_published ON processed_articles(topic, publishe
 
 CREATE INDEX idx_ae_entity ON article_entities(entity_id);
 CREATE INDEX idx_ae_article ON article_entities(processed_article_id);
-
-
--- Заполняем источники данными (из sources_insert.sql)
-INSERT INTO sources (name, type, external_id, url, meta_info)
-VALUES (
-  'Тинькофф Пульс (TInvest)',
-  'api',
-  'tinvest_pulse',
-  'https://www.tinvest.ru/pulse/',
-  '{"sector": "financial_social", "language": "ru", "note": "Парсер через API/скрапинг TInvest, тикер-ориентированный"}'
-)
-RETURNING id; -- id 1
-
-
-INSERT INTO sources (name, type, external_id, url, meta_info)
-VALUES (
-  'Лента ру',
-  'rss+parsing',
-  'lenta_ru',
-  'https://lenta.ru/',
-  '{"sector": "politics", "language": "ru", "note": "Парсер через RSS + скрапинг по ссылкам из RSS"}'
-)
-RETURNING id; -- id 2
