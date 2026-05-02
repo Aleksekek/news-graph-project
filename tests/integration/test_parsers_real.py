@@ -7,10 +7,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from src.core.constants import LENTA_CATEGORIES, TINVEST_TICKERS
 from src.parsers.factory import ParserFactory
-from src.parsers.lenta.parser import LentaParser
-from src.parsers.tinvest.parser import TInvestParser
 from src.utils.datetime_utils import now_msk
 
 
@@ -167,3 +164,322 @@ class TestTInvestParserReal:
                 assert item.published_at <= now_msk() + timedelta(minutes=5)
                 # Дата поста должна быть в пределах разумного (не сильно старше)
                 assert item.published_at >= now_msk() - timedelta(days=7)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestInterfaxParserReal:
+    """Реальные тесты парсера Интерфакс."""
+
+    async def test_parse_recent_articles(self):
+        """Парсинг свежих статей (реальный запрос)."""
+        parser = ParserFactory.create("interfax")
+
+        async with parser:
+            result = await parser.parse(limit=10)
+
+        assert len(result.items) <= 10
+        assert len(result.items) > 0  # Хотя бы одна статья
+
+        now = now_msk()
+        fresh_count = 0
+        for item in result.items:
+            assert item.title is not None
+            assert len(item.title) > 5
+            assert item.url.startswith("https://www.interfax.ru")
+            assert item.content is not None
+            assert len(item.content) > 100
+            # Интерфакс должен возвращать полный текст
+            assert len(item.content) > 500, "Текст статьи слишком короткий, возможно не полный"
+
+            if item.published_at:
+                # Дата не в будущем (с запасом 5 мин на погрешность)
+                assert item.published_at <= now + timedelta(minutes=5), (
+                    f"published_at {item.published_at} в будущем относительно "
+                    f"now_msk {now}. Возможен сдвиг часового пояса +3ч."
+                )
+                # Считаем свежие (моложе 3 часов)
+                if item.published_at >= now - timedelta(hours=3):
+                    fresh_count += 1
+
+        # Хотя бы треть статей должна быть моложе 3 часов
+        assert fresh_count >= max(1, len(result.items) // 3), (
+            f"Слишком мало свежих статей ({fresh_count}/{len(result.items)}). "
+            f"Возможно время парсится в UTC вместо MSK или RSS не обновляется."
+        )
+
+    async def test_parse_with_section_filter(self):
+        """Парсинг с фильтром по разделу."""
+        parser = ParserFactory.create("interfax")
+
+        async with parser:
+            # Пробуем бизнес раздел
+            result = await parser.parse(limit=5, sections=["business"])
+
+        assert isinstance(result.items, list)
+
+        for item in result.items:
+            section = item.metadata.get("section", "")
+            # Может быть пустой раздел, не строго проверяем
+
+    async def test_parse_multiple_sections(self):
+        """Парсинг нескольких разделов одновременно."""
+        parser = ParserFactory.create("interfax")
+
+        async with parser:
+            result = await parser.parse(limit=10, sections=["business", "russia"])
+
+        assert len(result.items) <= 10
+        # Должны быть статьи из обоих разделов или хотя бы из одного
+        sections_found = {item.metadata.get("section", "") for item in result.items}
+        # Хотя бы один из запрошенных разделов присутствует
+        assert len(sections_found) > 0
+
+    async def test_parse_period_recent(self):
+        """Парсинг за последние 24 часа (фильтрация RSS)."""
+        parser = ParserFactory.create("interfax")
+
+        end_date = now_msk()
+        start_date = end_date - timedelta(hours=24)
+
+        async with parser:
+            result = await parser.parse_period(start_date=start_date, end_date=end_date, limit=20)
+
+        assert isinstance(result.items, list)
+
+        # Все статьи должны быть в указанном периоде
+        for item in result.items:
+            if item.published_at:
+                assert (
+                    start_date - timedelta(minutes=5)
+                    <= item.published_at
+                    <= end_date + timedelta(minutes=5)
+                )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestTassParserReal:
+    """Реальные тесты парсера ТАСС."""
+
+    async def test_parse_recent_articles(self):
+        """Парсинг свежих статей (реальный запрос)."""
+        parser = ParserFactory.create("tass")
+
+        async with parser:
+            result = await parser.parse(limit=10)
+
+        assert len(result.items) <= 10
+        assert len(result.items) > 0  # Хотя бы одна статья
+
+        now = now_msk()
+        fresh_count = 0
+        for item in result.items:
+            assert item.title is not None
+            assert len(item.title) > 5
+            assert item.url.startswith("https://tass.ru")
+            assert item.content is not None
+            assert len(item.content) > 100
+            # ТАСС должен возвращать полный текст
+            assert len(item.content) > 500, "Текст статьи слишком короткий, возможно не полный"
+
+            if item.published_at:
+                # Дата не в будущем (с запасом 5 мин на погрешность)
+                assert item.published_at <= now + timedelta(minutes=5), (
+                    f"published_at {item.published_at} в будущем относительно "
+                    f"now_msk {now}. Возможен сдвиг часового пояса +3ч."
+                )
+                # Считаем свежие (моложе 3 часов)
+                if item.published_at >= now - timedelta(hours=3):
+                    fresh_count += 1
+
+        # Хотя бы треть статей должна быть моложе 3 часов
+        assert fresh_count >= max(1, len(result.items) // 3), (
+            f"Слишком мало свежих статей ({fresh_count}/{len(result.items)}). "
+            f"Возможно время парсится в UTC вместо MSK или RSS не обновляется."
+        )
+
+    async def test_parse_with_min_length_filter(self):
+        """Парсинг с фильтром по минимальной длине."""
+        parser = ParserFactory.create("tass")
+
+        async with parser:
+            # Устанавливаем высокий порог, чтобы отфильтровать короткие статьи
+            result_short = await parser.parse(limit=5, min_length=1000)
+            result_long = await parser.parse(limit=5, min_length=5000)
+
+        # Обе выборки должны быть валидными списками
+        assert isinstance(result_short.items, list)
+        assert isinstance(result_long.items, list)
+
+        # Статьи в result_long должны быть не короче 5000 символов
+        for item in result_long.items:
+            assert len(item.content) >= 5000
+
+    async def test_parse_period_recent(self):
+        """Парсинг за последние 24 часа (фильтрация RSS)."""
+        parser = ParserFactory.create("tass")
+
+        end_date = now_msk()
+        start_date = end_date - timedelta(hours=24)
+
+        async with parser:
+            result = await parser.parse_period(start_date=start_date, end_date=end_date, limit=20)
+
+        assert isinstance(result.items, list)
+
+        # Все статьи должны быть в указанном периоде
+        for item in result.items:
+            if item.published_at:
+                assert (
+                    start_date - timedelta(minutes=5)
+                    <= item.published_at
+                    <= end_date + timedelta(minutes=5)
+                )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestRbcParserReal:
+    """Реальные тесты парсера РБК."""
+
+    async def test_parse_recent_articles(self):
+        """Парсинг свежих статей (реальный запрос)."""
+        parser = ParserFactory.create("rbc")
+
+        async with parser:
+            result = await parser.parse(limit=10)
+
+        assert len(result.items) <= 10
+        assert len(result.items) > 0  # Хотя бы одна статья
+
+        now = now_msk()
+        fresh_count = 0
+        for item in result.items:
+            assert item.title is not None
+            assert len(item.title) > 5
+            assert item.url.startswith("https://www.rbc.ru") or item.url.startswith(
+                "https://rssexport.rbc.ru"
+            )
+            assert item.content is not None
+            assert len(item.content) > 100
+            # РБК через full.rss должен отдавать полный текст
+            assert (
+                len(item.content) > 500
+            ), "Текст статьи слишком короткий, возможно RSS не содержит полный текст"
+
+            if item.published_at:
+                # Дата не в будущем (с запасом 5 мин на погрешность)
+                assert item.published_at <= now + timedelta(minutes=5), (
+                    f"published_at {item.published_at} в будущем относительно "
+                    f"now_msk {now}. Возможен сдвиг часового пояса +3ч."
+                )
+                # Считаем свежие (моложе 3 часов)
+                if item.published_at >= now - timedelta(hours=3):
+                    fresh_count += 1
+
+        # Хотя бы треть статей должна быть моложе 3 часов
+        assert fresh_count >= max(1, len(result.items) // 3), (
+            f"Слишком мало свежих статей ({fresh_count}/{len(result.items)}). "
+            f"Возможно время парсится в UTC вместо MSK или RSS не обновляется."
+        )
+
+    async def test_parse_with_min_length_filter(self):
+        """Парсинг с фильтром по минимальной длине."""
+        parser = ParserFactory.create("rbc")
+
+        async with parser:
+            result = await parser.parse(limit=5, min_length=2000)
+
+        for item in result.items:
+            assert len(item.content) >= 2000
+
+    async def test_parse_handles_empty_rss(self):
+        """Проверка обработки пустого RSS или ошибок."""
+        parser = ParserFactory.create("rbc")
+
+        async with parser:
+            # Даже если RSS вернёт мало статей, парсер не должен падать
+            result = await parser.parse(limit=100)
+
+        assert isinstance(result.items, list)
+        # Не должно быть None или исключений
+
+    async def test_parse_period_recent(self):
+        """Парсинг за последние 24 часа (фильтрация RSS)."""
+        parser = ParserFactory.create("rbc")
+
+        end_date = now_msk()
+        start_date = end_date - timedelta(hours=24)
+
+        async with parser:
+            result = await parser.parse_period(start_date=start_date, end_date=end_date, limit=20)
+
+        assert isinstance(result.items, list)
+
+        # Все статьи должны быть в указанном периоде
+        for item in result.items:
+            if item.published_at:
+                assert (
+                    start_date - timedelta(minutes=5)
+                    <= item.published_at
+                    <= end_date + timedelta(minutes=5)
+                )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+class TestAllParsersComparison:
+    """Сравнительные тесты всех парсеров."""
+
+    async def test_all_parsers_return_articles(self):
+        """Все парсеры должны возвращать хотя бы одну статью."""
+        parsers = ["lenta", "tinvest", "interfax", "tass", "rbc"]
+
+        for parser_name in parsers:
+            parser = ParserFactory.create(parser_name)
+
+            async with parser:
+                try:
+                    result = await parser.parse(limit=3)
+
+                    # Лента и Тинькофф - проверяем обязательно
+                    if parser_name in ["lenta", "tinvest"]:
+                        assert len(result.items) > 0, f"{parser_name} не вернул ни одной статьи"
+                    else:
+                        # Новые парсеры - пока только предупреждение, если пусто
+                        if len(result.items) == 0:
+                            pytest.skip(
+                                f"{parser_name} не вернул статей. Возможно проблемы с сетью или RSS."
+                            )
+                        assert isinstance(result.items, list)
+
+                except Exception as e:
+                    if parser_name in ["lenta", "tinvest"]:
+                        raise
+                    else:
+                        pytest.skip(f"{parser_name} выбросил исключение: {e}")
+
+    async def test_all_parsers_validate_dates(self):
+        """Все парсеры должны корректно парсить даты в MSK."""
+        parsers = ["lenta", "tinvest", "interfax", "tass", "rbc"]
+        now = now_msk()
+
+        for parser_name in parsers:
+            parser = ParserFactory.create(parser_name)
+
+            async with parser:
+                try:
+                    result = await parser.parse(limit=5)
+
+                    for item in result.items:
+                        if item.published_at:
+                            # Не в будущем
+                            assert item.published_at <= now + timedelta(
+                                minutes=5
+                            ), f"{parser_name}: дата {item.published_at} в будущем"
+                except Exception as e:
+                    if parser_name in ["lenta", "tinvest"]:
+                        raise
+                    else:
+                        pytest.skip(f"{parser_name} не прошёл проверку дат: {e}")

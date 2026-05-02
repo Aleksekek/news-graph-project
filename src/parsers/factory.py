@@ -75,7 +75,7 @@ class ParserFactory:
         Создание парсера по имени источника.
 
         Args:
-            source_name: Имя источника ("lenta" или "tinvest")
+            source_name: Имя источника
             config_overrides: Переопределения конфигурации
                 - Для Lenta: {"categories": ["Политика"]}
                 - Для TInvest: {"tickers": ["SBER", "VTBR"]}

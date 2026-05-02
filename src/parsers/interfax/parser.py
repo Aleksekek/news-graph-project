@@ -19,9 +19,9 @@ from src.utils.logging import log_async_execution_time
 
 RSS_FEEDS: dict[str, str] = {
     "main":     "https://www.interfax.ru/rss.asp",
-    "russia":   "https://www.interfax.ru/russia/rss.asp",
-    "business": "https://www.interfax.ru/business/rss.asp",
-    "world":    "https://www.interfax.ru/world/rss.asp",
+    # "russia":   "https://www.interfax.ru/russia/rss.asp",
+    # "business": "https://www.interfax.ru/business/rss.asp",
+    # "world":    "https://www.interfax.ru/world/rss.asp",
 }
 
 _CONTENT_SELECTORS = [

@@ -16,8 +16,8 @@ from src.parsers.base import BaseParser, ParserConfig, ParseResult
 from src.utils.datetime_utils import parse_rfc2822_date
 from src.utils.logging import log_async_execution_time
 
-# Полный текст в фиде (20 последних статей)
-RSS_URL = "https://rssexport.rbc.ru/rbcnews/news/20/full.rss"
+# Полный текст в фиде (30 последних статей)https://rssexport.rbc.ru/rbcnews/news/30/full.rss
+RSS_URL = "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"
 
 
 class RbcParser(BaseParser):
