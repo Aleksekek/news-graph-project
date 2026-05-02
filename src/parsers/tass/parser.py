@@ -8,6 +8,7 @@ import hashlib
 from datetime import datetime
 from typing import Any
 
+import aiohttp
 import feedparser
 from bs4 import BeautifulSoup
 
@@ -37,9 +38,30 @@ class TassParser(BaseParser):
         - min_length: int — минимальная длина текста (по умолчанию 100)
     """
 
+    _FORBIDDEN_MARKERS = ("if you are not a bot", "datetime:", "id: w"
+                         , "exhkqyad", "are you a bot", "challenge")
+
     def __init__(self, config: ParserConfig):
         super().__init__(config)
         self.max_concurrent = 5
+
+    async def _setup_session(self):
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=self.config.timeout)
+            headers = {
+                "User-Agent": self.config.user_agent,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Cache-Control": "max-age=0",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+            }
+            self._session = aiohttp.ClientSession(timeout=timeout, headers=headers)
+            self.logger.debug(f"HTTP сессия создана для {self.source_name}")
 
     @log_async_execution_time()
     async def parse(self, limit: int = 100, **filters) -> ParseResult:
@@ -157,6 +179,15 @@ class TassParser(BaseParser):
         except ParserError:
             return ""
 
+        # Cloudflare JS-чалендж: маленькая страница с noscript redirect
+        html_lower = html.lower()
+        if len(html) < 5000 and "noscript" in html_lower and "refresh" in html_lower:
+            self.logger.warning(f"Бот-защита (JS-challenge) ТАСС для {url}")
+            return ""
+        if any(m in html_lower for m in self._FORBIDDEN_MARKERS):
+            self.logger.warning(f"Бот-защита ТАСС для {url}")
+            return ""
+
         soup = BeautifulSoup(html, "html.parser")
 
         for selector in _CONTENT_SELECTORS:
@@ -169,4 +200,19 @@ class TassParser(BaseParser):
             if len(text) > 100:
                 return text
 
-        return ""
+        # Paragraph-density fallback: clean noise globally, find densest text block
+        for tag in soup.find_all(["script", "style", "nav", "aside", "header", "footer"]):
+            tag.decompose()
+
+        best_text = ""
+        best_score = 0
+        for el in soup.find_all(["article", "div", "main", "section"]):
+            ps = el.find_all("p")
+            if len(ps) < 3:
+                continue
+            score = sum(len(p.get_text()) for p in ps)
+            if score > best_score:
+                best_score = score
+                best_text = el.get_text(separator="\n", strip=True)
+
+        return best_text

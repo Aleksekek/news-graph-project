@@ -24,10 +24,14 @@ RSS_FEEDS: dict[str, str] = {
     # "world":    "https://www.interfax.ru/world/rss.asp",
 }
 
+_ARTICLE_BODY_SELECTORS = [
+    "article[itemprop='articleBody']",
+    "div[itemprop='articleBody']",
+]
+
 _CONTENT_SELECTORS = [
     "article.textMaterial",
     "div.articleBody",
-    "div[itemprop='articleBody']",
     "div.material-text",
     "div.article__text",
     "div.news-text",
@@ -173,6 +177,17 @@ class InterfaxParser(BaseParser):
 
         soup = BeautifulSoup(html, "html.parser")
 
+        # Первый приоритет: article[itemprop="articleBody"] — только <p> теги, без мусора
+        for selector in _ARTICLE_BODY_SELECTORS:
+            body = soup.select_one(selector)
+            if not body:
+                continue
+            ps = [p.get_text(strip=True) for p in body.find_all("p") if p.get_text(strip=True)]
+            text = "\n\n".join(ps)
+            if len(text) > 50:
+                return text
+
+        # Запасные CSS-селекторы
         for selector in _CONTENT_SELECTORS:
             container = soup.select_one(selector)
             if not container:
