@@ -1,0 +1,55 @@
+# Конфиденциальное
+.env
+.env.local
+.env.production
+secrets/
+keys/
+config/private_*.py
+
+# Данные
+data/
+checkpoints/
+*.csv
+*.parquet
+*.jsonl
+*.db
+
+# Логи
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+.venv
+
+# Docker
+*.tar.gz
