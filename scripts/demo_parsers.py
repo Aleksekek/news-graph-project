@@ -32,6 +32,7 @@ else:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import logging
+
 logging.disable(logging.DEBUG)  # скрываем дебаг-шум, оставляем WARNING+
 
 from src.parsers.factory import ParserFactory
@@ -87,9 +88,7 @@ async def demo_parse(source: str, limit: int, full: bool, archive: bool) -> None
 
     async with parser:
         if archive:
-            result = await parser.parse_period(
-                start_date=start, end_date=end, limit=limit
-            )
+            result = await parser.parse_period(start_date=start, end_date=end, limit=limit)
         else:
             result = await parser.parse(limit=limit)
 
@@ -108,7 +107,9 @@ async def demo_parse(source: str, limit: int, full: bool, archive: bool) -> None
     avg = sum(lengths) // len(lengths)
     min_l = min(lengths)
     max_l = max(lengths)
-    print(f"  Итого: {len(items)} статей  |  длина текста — мин: {min_l}, сред: {avg}, макс: {max_l}")
+    print(
+        f"  Итого: {len(items)} статей  |  длина текста — мин: {min_l}, сред: {avg}, макс: {max_l}"
+    )
     print(_sep("═"))
 
 
@@ -127,6 +128,7 @@ async def main(args: argparse.Namespace) -> None:
             print(f"\n  [ОШИБКА] {source}: {e}\n")
             if args.verbose:
                 import traceback
+
                 traceback.print_exc()
 
 
@@ -135,29 +137,34 @@ if __name__ == "__main__":
         description="Визуальная проверка парсеров Interfax / TASS / RBC"
     )
     parser.add_argument(
-        "--source", "-s",
+        "--source",
+        "-s",
         choices=SOURCES,
         default=None,
         help="Источник (по умолчанию — все три)",
     )
     parser.add_argument(
-        "--limit", "-n",
+        "--limit",
+        "-n",
         type=int,
         default=5,
         help="Сколько статей получить (по умолчанию 5)",
     )
     parser.add_argument(
-        "--full", "-f",
+        "--full",
+        "-f",
         action="store_true",
         help="Показать полный текст (по умолчанию — первые 400 симв.)",
     )
     parser.add_argument(
-        "--archive", "-a",
+        "--archive",
+        "-a",
         action="store_true",
         help="Архивный парсинг за 1 января 2026 вместо свежей ленты",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Подробный трейсбек при ошибках",
     )

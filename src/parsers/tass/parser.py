@@ -7,6 +7,10 @@ Cloudflare-bypass: используется curl-cffi с имитацией TLS-
 что позволяет обходить JS-challenge без headless-браузера.
 """
 
+# Deferred аннотации нужны, чтобы CurlSession (импорт через try/except) можно было
+# использовать в type hints без кавычек: при отсутствии curl-cffi имя не резолвится.
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import html
@@ -19,6 +23,7 @@ from bs4 import BeautifulSoup
 
 try:
     from curl_cffi.requests import AsyncSession as CurlSession
+
     _CURL_AVAILABLE = True
 except ImportError:
     _CURL_AVAILABLE = False
@@ -36,7 +41,7 @@ RSS_URL = "https://tass.ru/rss/yandex.xml"
 # ТАСС использует Next.js с CSS-модулями; имена классов содержат хеши.
 # Стабильные селекторы — по тегу и data-атрибутам.
 _CONTENT_SELECTORS = [
-    "article",                          # ТАСС: ContentPageContainer_content (CSS-хеш меняется)
+    "article",  # ТАСС: ContentPageContainer_content (CSS-хеш меняется)
     "div[data-testid='article-body']",
     "div.article-body__content",
     "div.ArticleView__content",
@@ -69,7 +74,7 @@ class TassParser(BaseParser):
     def __init__(self, config: ParserConfig):
         super().__init__(config)
         self.max_concurrent = 5
-        self._curl_session: "CurlSession | None" = None
+        self._curl_session: CurlSession | None = None
         # Кеш sitemap_news{N} на жизнь сессии: N → list[(url, lastmod)] или None (404).
         self._sitemap_cache: dict[int, list[tuple[str, datetime]] | None] = {}
 
@@ -199,14 +204,16 @@ class TassParser(BaseParser):
                 if entry.get("published"):
                     published_at = parse_rfc2822_date(entry.published)
 
-                items.append({
-                    "link": link,
-                    "title": entry.get("title", ""),
-                    "summary": entry.get("summary", ""),
-                    "published_at": published_at,
-                    # yandex.xml содержит полный текст в <yandex:full-text>
-                    "full_text_raw": entry.get("yandex_full-text", ""),
-                })
+                items.append(
+                    {
+                        "link": link,
+                        "title": entry.get("title", ""),
+                        "summary": entry.get("summary", ""),
+                        "published_at": published_at,
+                        # yandex.xml содержит полный текст в <yandex:full-text>
+                        "full_text_raw": entry.get("yandex_full-text", ""),
+                    }
+                )
 
             return items
 
@@ -320,9 +327,7 @@ class TassParser(BaseParser):
         results = await asyncio.gather(*[fetch_archive(u, lm) for u, lm in url_lastmods])
         return [r for r in results if r is not None]
 
-    async def _get_sitemap_urls_for_date(
-        self, target_date: datetime
-    ) -> list[tuple[str, datetime]]:
+    async def _get_sitemap_urls_for_date(self, target_date: datetime) -> list[tuple[str, datetime]]:
         """Ищет (url, lastmod) для статей с lastmod.date() == target_date через sitemap_news{N}.xml.
 
         Стратегия: sitemap_news0 — самые свежие; идём в сторону больших N
@@ -430,7 +435,11 @@ class TassParser(BaseParser):
             for tag in container.find_all(["script", "style", "figure", "aside", "nav"]):
                 tag.decompose()
             # Предпочитаем <p>-теги для чистого текста
-            ps = [p.get_text(" ", strip=True) for p in container.find_all("p") if len(p.get_text(strip=True)) > 30]
+            ps = [
+                p.get_text(" ", strip=True)
+                for p in container.find_all("p")
+                if len(p.get_text(strip=True)) > 30
+            ]
             if ps:
                 text = "\n\n".join(ps)
                 if len(text) > 100:
