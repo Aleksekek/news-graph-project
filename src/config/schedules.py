@@ -1,6 +1,9 @@
 """
 Конфигурация расписания задач.
 Загружается из YAML файла с дефолтами.
+
+После рефакторинга парсеров (2026-05) RSS-only пути дают <2 сек на цикл,
+поэтому отдельные day/night конфигурации больше не нужны: один cron на 24 часа.
 """
 
 import os
@@ -35,78 +38,59 @@ class ScheduleConfig:
         self.tasks = self._load_config()
 
     def _load_config(self) -> dict[str, TaskConfig]:
-        """Загрузка конфигурации с дефолтами."""
+        """Загрузка конфигурации с дефолтами.
 
-        # Дефолтные задачи
+        Расписание:
+          - Новостные ленты (Lenta/Interfax/TASS/RBC) — каждые 30 минут.
+            RSS у каждой содержит 30+ свежих статей, потеря между фетчами
+            практически невозможна.
+          - TInvest — каждые 15 минут (форум, более высокая частота публикаций).
+          - Источники staggered по 5 минут, чтобы не бить в БД и сеть пачкой.
+
+        Лимиты выставлены на 30: примерно столько свежих статей в RSS
+        каждого источника. Если новых меньше — берём то, что есть.
+        """
+
         default_tasks = {
-            # Lenta: днем каждые 30 мин (на 00 и 30), ночью каждый час (на 00)
-            "lenta_day": TaskConfig(
-                name="Дневной парсинг Lenta.ru (08:00-22:00)",
-                cron="0,30 8-21 * * *",
+            # :00, :30
+            "lenta": TaskConfig(
+                name="Парсинг Lenta.ru",
+                cron="0,30 * * * *",
                 enabled=True,
                 kwargs={"limit": 30, "categories": LENTA_CATEGORIES},
             ),
-            "lenta_night": TaskConfig(
-                name="Ночной парсинг Lenta.ru",
-                cron="0 0-7,22,23 * * *",
+            # :05, :20, :35, :50 — каждые 15 мин
+            "tinvest": TaskConfig(
+                name="Парсинг TInvest Pulse",
+                cron="5,20,35,50 * * * *",
                 enabled=True,
-                kwargs={"limit": 25, "categories": LENTA_CATEGORIES},
+                kwargs={"limit": 30, "tickers": TINVEST_TICKERS},
             ),
-            # TInvest: сдвинут на 7 минут (днем каждые 15 мин, ночью каждые 30 мин)
-            "tinvest_day": TaskConfig(
-                name="Дневной парсинг TInvest (08:00-22:00)",
-                cron="7,22,37,52 8-21 * * *",  # 8:07, 8:22, 8:37, 8:52...
-                enabled=True,
-                kwargs={"limit": 20, "tickers": TINVEST_TICKERS},
-            ),
-            "tinvest_night": TaskConfig(
-                name="Ночной парсинг TInvest",
-                cron="7,37 0-7,22,23 * * *",  # 22:07, 22:37, 23:07, 0:07, 0:37...
-                enabled=True,  # и так до 7:37
-                kwargs={"limit": 25, "tickers": TINVEST_TICKERS},
-            ),
-            # Interfax: сдвиг +5 мин (каждые 30 мин днём, 60 мин ночью)
-            "interfax_day": TaskConfig(
-                name="Дневной парсинг Интерфакс (08:00-22:00)",
-                cron="5,35 8-21 * * *",
+            # :10, :40
+            "interfax": TaskConfig(
+                name="Парсинг Интерфакс",
+                cron="10,40 * * * *",
                 enabled=True,
                 kwargs={"limit": 30, "sections": ["main", "russia", "business"]},
             ),
-            "interfax_night": TaskConfig(
-                name="Ночной парсинг Интерфакс",
-                cron="5 0-7,22,23 * * *",
-                enabled=True,
-                kwargs={"limit": 25, "sections": ["main"]},
-            ),
-            # ТАСС: сдвиг +10 мин
-            "tass_day": TaskConfig(
-                name="Дневной парсинг ТАСС (08:00-22:00)",
-                cron="10,40 8-21 * * *",
+            # :15, :45
+            "tass": TaskConfig(
+                name="Парсинг ТАСС",
+                cron="15,45 * * * *",
                 enabled=True,
                 kwargs={"limit": 30},
             ),
-            "tass_night": TaskConfig(
-                name="Ночной парсинг ТАСС",
-                cron="10 0-7,22,23 * * *",
+            # :25, :55
+            "rbc": TaskConfig(
+                name="Парсинг РБК",
+                cron="25,55 * * * *",
                 enabled=True,
-                kwargs={"limit": 25},
-            ),
-            # РБК: сдвиг +15 мин (full.rss отдаёт только 20 последних — лимит 20)
-            "rbc_day": TaskConfig(
-                name="Дневной парсинг РБК (08:00-22:00)",
-                cron="15,45 8-21 * * *",
-                enabled=True,
-                kwargs={"limit": 20},
-            ),
-            "rbc_night": TaskConfig(
-                name="Ночной парсинг РБК",
-                cron="15 0-7,22,23 * * *",
-                enabled=True,
-                kwargs={"limit": 20},
+                # RBC RSS отдаёт ровно 30 свежих статей — забираем все
+                kwargs={"limit": 30},
             ),
         }
 
-        # Пробуем загрузить из YAML
+        # Пробуем загрузить из YAML (опционально, переопределяет дефолты)
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, encoding="utf-8") as f:
