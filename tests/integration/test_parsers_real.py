@@ -19,6 +19,10 @@ from src.utils.datetime_utils import now_msk
 # Минимальная длина полноценной статьи (не RSS-summary)
 _MIN_ARTICLE_LEN = 500       # РБК, длинные источники
 _MIN_BRIEF_LEN = 150         # Интерфакс: публикует короткие новостные сводки (2-3 предложения)
+# Per-article порог для не-summary: совпадает с min_length фильтром в парсерах.
+# "Новость дополняется"-stubs у ТАСС/РБК идут ~120 симв. — мы их сохраняем,
+# но проверяем sanity через долю длинных статей (≥1/3).
+_MIN_FULL_TEXT_LEN = 100
 
 # Шум, который не должен попадать в очищенный текст РБК
 _RBC_NOISE_PHRASES = (
@@ -293,18 +297,26 @@ class TestTassParserReal:
         )
 
     async def test_parse_full_text(self):
-        """Полный текст статей через curl-cffi (обход Cloudflare по TLS-fingerprint)."""
+        """Полный текст статей через yandex.xml (yandex_full-text) или fallback HTML."""
         parser = ParserFactory.create("tass")
 
         async with parser:
-            result = await parser.parse(limit=5)
+            result = await parser.parse(limit=10)
 
         assert len(result.items) >= 3
+        # Каждая статья — не RSS-summary, а полный текст (короткая breaking news → 200+).
         for item in result.items:
-            assert len(item.content) >= _MIN_ARTICLE_LEN, (
+            assert len(item.content) >= _MIN_FULL_TEXT_LEN, (
                 f"Контент слишком короткий ({len(item.content)} симв.) — "
                 f"похоже на RSS-summary, а не полный текст: {item.url}"
             )
+        # При этом ≥1/3 статей — длинные (≥500 симв.), как сanity-check, что
+        # большинство — это аналитика/репортажи, а не только однострочные молнии.
+        long_articles = [it for it in result.items if len(it.content) >= _MIN_ARTICLE_LEN]
+        assert len(long_articles) >= max(1, len(result.items) // 3), (
+            f"Слишком много коротких статей ({len(long_articles)}/{len(result.items)} ≥{_MIN_ARTICLE_LEN}). "
+            f"Возможно, yandex_full-text не извлекается или fallback HTML отдаёт навигацию."
+        )
 
     async def test_parse_with_min_length_filter(self):
         """Фильтр min_length должен работать: result_long ⊆ result_short по контенту."""
@@ -329,16 +341,8 @@ class TestTassParserReal:
                 f"Статья не прошла бы фильтр min_length=1000 ({len(item.content)} симв.): {item.url}"
             )
 
-    @pytest.mark.xfail(
-        reason=(
-            "ТАСС архив (tass.ru/search) — React SPA с динамической подгрузкой. "
-            "parse_period() фильтрует только текущую RSS-ленту по дате: "
-            "архивные статьи за 01.01.2026 недоступны."
-        ),
-        strict=False,
-    )
     async def test_parse_period_archive(self):
-        """Архивный парсинг: xfail пока ТАСС не имеет статичного архивного эндпоинта."""
+        """Архивный парсинг через sitemap_news{N}.xml + индивидуальный fetch HTML."""
         parser = ParserFactory.create("tass")
 
         start_date = datetime(2026, 1, 1, 0, 0, 0)
@@ -350,6 +354,22 @@ class TestTassParserReal:
         assert len(result.items) >= 10, (
             f"Ожидали ≥10 архивных статей ТАСС, получили {len(result.items)}"
         )
+        # Все статьи должны попадать в целевой день
+        for item in result.items:
+            assert item.url.startswith("https://tass.ru/")
+            if item.published_at:
+                assert (
+                    start_date - timedelta(minutes=5)
+                    <= item.published_at
+                    <= end_date + timedelta(minutes=5)
+                ), f"Дата {item.published_at} вне диапазона 01.01.2026: {item.url}"
+        # Время не должно быть только midnight (sitemap lastmod даёт точное время)
+        items_with_time = [
+            it for it in result.items if it.published_at and it.published_at.hour != 0
+        ]
+        assert len(items_with_time) >= len(result.items) // 2, (
+            "Слишком много статей с временем 00:00 — sitemap lastmod не используется."
+        )
 
 
 @pytest.mark.integration
@@ -358,7 +378,7 @@ class TestRbcParserReal:
     """Реальные тесты парсера РБК."""
 
     async def test_parse_recent_articles(self):
-        """Парсинг свежих статей: полный текст + отсутствие шума."""
+        """Парсинг свежих статей: полный текст из rbc_news_full-text + отсутствие шума."""
         parser = ParserFactory.create("rbc")
 
         async with parser:
@@ -377,12 +397,13 @@ class TestRbcParserReal:
                 "https://rssexport.rbc.ru"
             )
             assert item.content is not None
-            assert len(item.content) >= _MIN_ARTICLE_LEN, (
+            # Все статьи — не RSS-summary; короткая breaking news ≥200 симв.
+            assert len(item.content) >= _MIN_FULL_TEXT_LEN, (
                 f"Текст статьи слишком короткий ({len(item.content)} симв.) — "
-                f"возможно, это RSS-summary или live-blog: {item.url}"
+                f"возможно, это RSS-summary: {item.url}"
             )
 
-            # Проверяем отсутствие шума в тексте
+            # Шум из HTML-страниц не должен попадать в текст
             content_lower = item.content.lower()
             for noise in _RBC_NOISE_PHRASES:
                 assert noise not in content_lower, (
@@ -394,6 +415,13 @@ class TestRbcParserReal:
                 assert item.published_at <= now + timedelta(minutes=5)
                 if item.published_at >= now - timedelta(hours=3):
                     fresh_count += 1
+
+        # ≥1/3 статей — длинные (≥500 симв.) как sanity-check
+        long_articles = [it for it in result.items if len(it.content) >= _MIN_ARTICLE_LEN]
+        assert len(long_articles) >= max(1, len(result.items) // 3), (
+            f"Слишком мало длинных статей ({len(long_articles)}/{len(result.items)} ≥{_MIN_ARTICLE_LEN}). "
+            f"Возможно, rbc_news_full-text не извлекается."
+        )
 
         assert fresh_count >= max(1, len(result.items) // 3), (
             f"Слишком мало свежих статей ({fresh_count}/{len(result.items)}). "
@@ -437,12 +465,19 @@ class TestRbcParserReal:
 
         for item in result.items:
             assert item.title and len(item.title) > 5
-            assert item.content and len(item.content) >= _MIN_ARTICLE_LEN, (
+            assert item.content and len(item.content) >= _MIN_FULL_TEXT_LEN, (
                 f"Текст статьи {item.url} слишком короткий ({len(item.content)} симв.)"
             )
             assert item.url.startswith("https://www.rbc.ru"), (
                 f"URL статьи не принадлежит www.rbc.ru: {item.url}"
             )
+
+        # Большинство статей — длинные репортажи (sanity-check)
+        long_articles = [it for it in result.items if len(it.content) >= _MIN_ARTICLE_LEN]
+        assert len(long_articles) >= len(result.items) // 2, (
+            f"Слишком мало длинных статей ({len(long_articles)}/{len(result.items)} ≥{_MIN_ARTICLE_LEN}). "
+            f"Архив должен преимущественно содержать аналитику, а не короткие молнии."
+        )
 
 
 @pytest.mark.integration

@@ -58,3 +58,8 @@ env/
 
 # Docker
 *.tar.gz
+
+# Claude
+CLAUDE.md
+.claudeignore
+product-vision.md

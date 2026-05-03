@@ -1,11 +1,12 @@
 """
 Парсер РБК (rbc.ru).
-parse()        — RSS для метаданных, полный текст загружается со страницы статьи.
-parse_period() — архивный парсер через /search/ (по образцу Lenta).
+parse()        — RSS rbc_news_full-text (полный текст в самой ленте); fallback на HTML.
+parse_period() — архивный парсер через AJAX API поиска + HTML страниц.
 """
 
 import asyncio
 import hashlib
+import html
 import re
 from datetime import datetime, timedelta
 from typing import Any
@@ -41,13 +42,7 @@ _NOISE_LINES = (
     "[ рбк ]",           # инлайн-ссылки на другие материалы
 )
 
-# Паттерны для извлечения даты публикации из URL
-# rbcfreenews: /rbcfreenews/695313410123456789 — первые 8 hex-цифр ID = Unix timestamp
-_RBCFREENEWS_RE = re.compile(r'/rbcfreenews/([0-9a-fA-F]{8})[0-9a-fA-F]+')
-# Категорийный URL: /economics/news/01/05/2026/ → (day, month, year)
-_CATEGORY_DATE_RE = re.compile(r'/(\d{2})/(\d{2})/(\d{4})/')
-
-# Селекторы для текста статьи
+# Селекторы для текста статьи (HTML-страница, fallback и архив)
 _ARTICLE_SELECTORS = [
     "div.article__text",
     "div.article__content",
@@ -63,7 +58,8 @@ class RbcParser(BaseParser):
     Filters для parse():
         - min_length: int — минимальная длина текста (по умолчанию 100)
     Filters для parse_period():
-        - max_per_day: int — максимум статей за день (по умолчанию 20, лимит API)
+        - max_per_day: int — максимум статей за день (по умолчанию 300; AJAX API
+          отдаёт по 20/стр, мы пагинируемся до moreExists=false или _MAX_ARCHIVE_PAGES)
         - min_length: int — минимальная длина текста (по умолчанию 100)
     """
 
@@ -89,8 +85,8 @@ class RbcParser(BaseParser):
     async def parse_period(
         self, start_date: datetime, end_date: datetime, limit: int = 100, **filters
     ) -> ParseResult:
-        """Архивный парсинг через AJAX API с итерацией по дням (до 20 статей/день)."""
-        max_per_day = filters.get("max_per_day", 20)
+        """Архивный парсинг через AJAX API с итерацией по дням (с пагинацией по 20/стр)."""
+        max_per_day = filters.get("max_per_day", 300)
         min_length = filters.get("min_length", 100)
 
         self.logger.info(f"Архивный парсинг РБК: {start_date.date()} — {end_date.date()}")
@@ -142,26 +138,36 @@ class RbcParser(BaseParser):
                 self.logger.warning(f"RSS warning: {feed.bozo_exception}")
 
             items = []
+            seen_urls: set[str] = set()
             for entry in feed.entries:
                 if len(items) >= limit:
                     break
-                link = entry.get("link", "")
+                # RBC RSS даёт несколько <link> на запись: первая — основная статья,
+                # остальные — related/recommended (могут быть многомесячной давности).
+                # feedparser для entry.link возвращает ПОСЛЕДНЮЮ ссылку, не первую.
+                link = ""
+                if entry.get("links"):
+                    link = entry.links[0].get("href", "")
                 if not link:
+                    link = entry.get("link", "")
+                if not link or link in seen_urls:
                     continue
                 # Пропускаем онлайн-трансляции (живые тикеры без статичного текста)
                 if "/textonlines/" in link:
                     continue
+                seen_urls.add(link)
 
-                # RSS published = время попадания в ленту, не дата публикации.
-                # Реальная дата вшита в URL.
-                published_at = self._extract_url_date(link)
-                if published_at is None and entry.get("published"):
+                published_at = None
+                if entry.get("published"):
                     published_at = parse_rfc2822_date(entry.published)
 
                 items.append({
                     "link": link,
                     "title": entry.get("title", ""),
                     "published_at": published_at,
+                    # RBC RSS отдаёт полный текст в rbc_news_full-text — используем его
+                    # вместо хождения за HTML страницы. Содержит HTML-сущности и теги.
+                    "full_text_raw": entry.get("rbc_news_full-text", ""),
                 })
 
             return items
@@ -176,31 +182,59 @@ class RbcParser(BaseParser):
         semaphore = asyncio.Semaphore(self.max_concurrent)
 
         async def fetch_one(item: dict) -> ParsedItem | None:
-            async with semaphore:
-                try:
-                    await self._delay()
-                    title, content = await self._fetch_article_full(item["link"])
-                    if not content or len(content) < min_length:
-                        return None
-                    if not title:
-                        title = item.get("title", "Без заголовка")
+            try:
+                # 1. Пробуем взять текст прямо из RSS (rbc_news_full-text)
+                content = self._clean_rss_full_text(item.get("full_text_raw", ""))
+                title = item.get("title", "") or ""
 
-                    url_hash = hashlib.md5(item["link"].encode()).hexdigest()[:12]
-                    raw = {
-                        "original_id": f"rbc_{url_hash}",
-                        "url": item["link"],
-                        "title": title,
-                        "content": content,
-                        "published_at": item["published_at"],
-                    }
-                    parsed = self.to_parsed_item(raw)
-                    return parsed if self._validate_item(parsed) else None
-                except Exception as e:
-                    self.logger.error(f"Ошибка {item['link']}: {e}")
+                # 2. Fallback: если в RSS пусто/коротко — идём за HTML страницей
+                if not content or len(content) < min_length:
+                    async with semaphore:
+                        await self._delay()
+                        page_title, page_content = await self._fetch_article_full(item["link"])
+                    if page_content and len(page_content) >= min_length:
+                        content = page_content
+                    if not title:
+                        title = page_title
+
+                if not content or len(content) < min_length:
                     return None
+                if not title:
+                    title = "Без заголовка"
+
+                url_hash = hashlib.md5(item["link"].encode()).hexdigest()[:12]
+                raw = {
+                    "original_id": f"rbc_{url_hash}",
+                    "url": item["link"],
+                    "title": title,
+                    "content": content,
+                    "published_at": item["published_at"],
+                }
+                parsed = self.to_parsed_item(raw)
+                return parsed if self._validate_item(parsed) else None
+            except Exception as e:
+                self.logger.error(f"Ошибка {item['link']}: {e}")
+                return None
 
         results = await asyncio.gather(*[fetch_one(item) for item in rss_items])
         return [r for r in results if r is not None]
+
+    def _clean_rss_full_text(self, raw: str) -> str:
+        """Очищает rbc_news_full-text: HTML-сущности, теги, шумовые строки."""
+        if not raw:
+            return ""
+        text = html.unescape(raw)
+        # <br>, <br/>, <br /> → перенос строки
+        text = re.sub(r"<\s*br\s*/?\s*>", "\n", text, flags=re.I)
+        # <p>, </p> → двойной перенос (граница абзаца)
+        text = re.sub(r"</?p[^>]*>", "\n\n", text, flags=re.I)
+        # Прочие теги — выкидываем
+        text = re.sub(r"<[^>]+>", "", text)
+        # Нормализуем пробелы и переносы
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n[ \t]+", "\n", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+        return self._clean_rbc_text(text.strip())
 
     # ── Архив (parse_period) ───────────────────────────────────────────────────
 
@@ -306,11 +340,11 @@ class RbcParser(BaseParser):
     async def _fetch_article_full(self, url: str) -> tuple[str, str]:
         """Возвращает (title, content) для одной статьи."""
         try:
-            html = await self._fetch_url(url)
+            page_html = await self._fetch_url(url)
         except ParserError:
             return "", ""
 
-        soup = BeautifulSoup(html, "html.parser")
+        soup = BeautifulSoup(page_html, "html.parser")
 
         # Заголовок
         title = ""
@@ -366,35 +400,3 @@ class RbcParser(BaseParser):
                 return text
 
         return ""
-
-    @staticmethod
-    def _extract_url_date(url: str) -> datetime | None:
-        """Извлекает реальную дату публикации из URL статьи РБК.
-
-        RSS-поле published содержит время попадания в ленту, а не публикации.
-        Для rbcfreenews: первые 8 hex-цифр числового ID — Unix timestamp.
-        Для категорийных статей: дата вшита в путь /DD/MM/YYYY/.
-        """
-        m = _RBCFREENEWS_RE.search(url)
-        if m:
-            try:
-                return datetime.fromtimestamp(int(m.group(1), 16))
-            except (ValueError, OSError):
-                pass
-
-        m = _CATEGORY_DATE_RE.search(url)
-        if m:
-            try:
-                day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
-                return datetime(year, month, day)
-            except ValueError:
-                pass
-
-        return None
-
-    @staticmethod
-    def _strip_html(html: str) -> str:
-        soup = BeautifulSoup(html, "html.parser")
-        for tag in soup.find_all(["script", "style"]):
-            tag.decompose()
-        return soup.get_text(separator="\n", strip=True)

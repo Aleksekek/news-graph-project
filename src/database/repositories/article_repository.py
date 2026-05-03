@@ -89,19 +89,25 @@ class ArticleRepository:
                     )
                 )
 
-            # Batch insert
+            # Batch insert. ON CONFLICT — защита от race condition: если параллельно
+            # пишут два процесса (или две ленты с одинаковыми URL), второй просто
+            # пропустит дубликат вместо UniqueViolation, который бы откатил весь batch.
             sql = """
                 INSERT INTO raw_articles (
                     source_id, original_id, url, raw_title, raw_text,
                     raw_html, media_content, published_at, author, language,
                     headers, meta_info, status
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (url) DO NOTHING
             """
 
             await conn.executemany(sql, batch_data)
+            # stats.saved — верхняя оценка: при идеальной последовательности парсеров
+            # совпадает с реальностью. При гонке часть могла улететь в DO NOTHING,
+            # но это редкий edge case (URL'ы между источниками почти не пересекаются).
             stats.saved = len(batch_data)
 
-            logger.info(f"✅ Сохранено {stats.saved} статей (пропущено {stats.skipped})")
+            logger.info(f"✅ Сохранено ≤{stats.saved} статей (пропущено {stats.skipped})")
 
         return stats
 

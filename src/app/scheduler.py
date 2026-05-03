@@ -77,6 +77,16 @@ def setup_scheduler() -> AsyncIOScheduler:
             name=task.name,
             kwargs={"source": source, **task.kwargs},
             replace_existing=True,
+            # max_instances=1: одна и та же задача (тот же job_id) не запустится
+            # дважды параллельно — следующий cron-тик пропустит, если предыдущий
+            # ещё бежит. Это default в APScheduler, но фиксируем явно.
+            max_instances=1,
+            # coalesce=True: при пропусках (рестарт сервера, длинная задача) не
+            # навёрстывает каждый пропущенный тик, а выполняет ровно один раз.
+            coalesce=True,
+            # misfire_grace_time=60: если cron-тик опоздал на ≤60 сек (из-за загрузки
+            # event-loop), задача всё равно выполнится. Иначе пропускается с warning.
+            misfire_grace_time=60,
         )
 
         logger.info(f"📅 Задача '{task.name}' добавлена: " f"cron='{task.cron}', source={source}")

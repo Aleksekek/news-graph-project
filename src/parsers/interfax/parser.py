@@ -348,7 +348,7 @@ class InterfaxParser(BaseParser):
             body = soup.select_one(selector)
             if not body:
                 continue
-            ps = [p.get_text(strip=True) for p in body.find_all("p") if p.get_text(strip=True)]
+            ps = [p.get_text(" ", strip=True) for p in body.find_all("p") if p.get_text(strip=True)]
             text = "\n\n".join(ps)
             if len(text) > 50:
                 return text
