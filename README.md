@@ -18,7 +18,7 @@ docker-compose up -d
 
 | Сервис | Описание | Расписание |
 |--------|----------|------------|
-| **parser** | Сбор новостей из источников | Каждые 30 мин (день), 1 ч (ночь) |
+| **parser** | Сбор новостей из 5 источников (Lenta, TInvest, Interfax, TASS, RBC) | Каждые 30 мин на источник (TInvest — 15 мин), staggered по 5 мин |
 | **summarizer** | Генерация сводок через DeepSeek | Каждый час + дневная сводка 09:05 |
 | **ner** | Извлечение именованных сущностей (Natasha) | Каждые 30 мин + очистка вс 03:00 |
 | **bot** | Telegram-бот | По запросу пользователя |
@@ -49,7 +49,7 @@ src/
 │   └── repositories/       # ArticleRepository, EntityRepository,
 │                           # ProcessedArticleRepository, ArticleEntityRepository,
 │                           # SummaryRepository
-├── parsers/                # Lenta.ru, TInvest + фабрики
+├── parsers/                # Lenta, TInvest, Interfax, TASS, RBC + фабрики
 ├── processing/             # LLM, суммаризация
 ├── utils/                  # datetime, logging, retry
 └── infrastructure/         # Telegram-бот

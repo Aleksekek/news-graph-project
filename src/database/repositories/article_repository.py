@@ -107,7 +107,7 @@ class ArticleRepository:
             # но это редкий edge case (URL'ы между источниками почти не пересекаются).
             stats.saved = len(batch_data)
 
-            logger.info(f"✅ Сохранено ≤{stats.saved} статей (пропущено {stats.skipped})")
+            logger.info(f"✅ Сохранено {stats.saved} статей (пропущено {stats.skipped})")
 
         return stats
 

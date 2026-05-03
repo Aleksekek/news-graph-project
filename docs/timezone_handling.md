@@ -14,7 +14,9 @@
 ## Почему MSK?
 
 - Lenta.ru отдаёт время уже в MSK
-- TInvest отдаёт в UTC, но мы конвертируем
+- TInvest отдаёт в UTC, конвертируем
+- Interfax/RBC отдают в RFC 2822 (с timezone-offset, обычно `+0300`); приводим к MSK naive через `parse_rfc2822_date`
+- TASS отдаёт ISO 8601 с timezone (sitemap `<lastmod>` и meta `article:published_time` — `+03:00`); приводим к MSK naive
 - Большинство пользователей из UTC+3
 - Упрощает отладку и запросы к БД
 
@@ -45,7 +47,5 @@ display = format_for_display(msk_time, include_time=True)  # "17.01.2026 19:09"
 ## Проверка
 
 ```bash
-pytest tests/unit/test_datetime_utils.py -v
+pytest tests/unit/utils/test_datetime_utils.py tests/unit/utils/test_datetime_utils_extended.py -v
 ```
-
-Все 11 тестов должны проходить.

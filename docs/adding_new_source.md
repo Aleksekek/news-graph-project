@@ -73,6 +73,9 @@ from src.parsers.newsource.parser import NewsourceParser
 _parsers_registry = {
     "lenta": LentaParser,
     "tinvest": TInvestParser,
+    "interfax": InterfaxParser,
+    "tass": TassParser,
+    "rbc": RbcParser,
     "newsource": NewsourceParser,  # добавить
 }
 
@@ -89,6 +92,9 @@ from src.parsers.newsource.converter import NewsourceConverter
 _converters = {
     "lenta": LentaConverter,
     "tinvest": TInvestConverter,
+    "interfax": InterfaxConverter,
+    "tass": TassConverter,
+    "rbc": RbcConverter,
     "newsource": NewsourceConverter,  # добавить
 }
 ```
@@ -100,25 +106,35 @@ _converters = {
 SOURCE_IDS = {
     "tinvest": 1,
     "lenta": 2,
-    "newsource": 3,  # новый ID
+    "interfax": 3,
+    "tass": 4,
+    "rbc": 5,
+    "newsource": 6,  # новый ID
 }
 ```
 
-## Шаг 6: Обновите расписание (опционально)
+## Шаг 6: Обновите расписание
 
-```yaml
-# config/schedule_config.yaml
-newsource_hourly:
-  enabled: true
-  cron: "0 * * * *"
-  kwargs:
-    limit: 50
+Добавьте задачу в [src/config/schedules.py](../src/config/schedules.py) (дефолты) или опционально переопределите через `config/schedule_config.yaml`:
+
+```python
+# src/config/schedules.py
+default_tasks = {
+    ...
+    # подберите минуту, не пересекающуюся с другими источниками (текущий шаг — 5 мин)
+    "newsource": TaskConfig(
+        name="Парсинг NewSource",
+        cron="0,30 * * * *",
+        enabled=True,
+        kwargs={"limit": 30},
+    ),
+}
 ```
 
 ## Шаг 7: Напишите тесты
 
 ```python
-# tests/intergation/test_newsource_parser.py
+# tests/integration/test_newsource_parser.py
 
 import pytest
 from src.parsers.factory import ParserFactory
