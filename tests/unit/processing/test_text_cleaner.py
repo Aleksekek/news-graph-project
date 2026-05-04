@@ -73,3 +73,82 @@ class TestCleanArticleText:
         title, text = clean_article_text("  Заголовок  ", "  Много   пробелов  ")
         assert title == "Заголовок"
         assert text == "Много пробелов"
+
+
+class TestDatelineStripping:
+    """Source-специфичные дейтлайны должны убираться из тела статьи."""
+
+    def test_tass_dateline_simple(self):
+        _, text = clean_article_text(
+            "", "МОСКВА, 3 мая. /ТАСС/. Очередное ужесточение.", source="tass"
+        )
+        assert text == "Очередное ужесточение."
+
+    def test_tass_dateline_compound_city(self):
+        _, text = clean_article_text(
+            "", "САНКТ-ПЕТЕРБУРГ, 5 мая. /ТАСС/. Северная столица.", source="tass"
+        )
+        assert text == "Северная столица."
+
+    def test_tass_dateline_hyphenated_city(self):
+        _, text = clean_article_text(
+            "", "НЬЮ-ЙОРК, 3 мая. /ТАСС/. Reuters сообщил.", source="tass"
+        )
+        assert text == "Reuters сообщил."
+
+    def test_interfax_dateline_simple(self):
+        _, text = clean_article_text(
+            "", "Москва. 3 мая. INTERFAX.RU - Губернатор сообщил.", source="interfax"
+        )
+        assert text == "Губернатор сообщил."
+
+    def test_interfax_dateline_compound_city(self):
+        _, text = clean_article_text(
+            "", "Нижний Новгород. 7 мая. INTERFAX.RU - Сообщили.", source="interfax"
+        )
+        assert text == "Сообщили."
+
+    def test_interfax_dateline_hyphenated_city(self):
+        _, text = clean_article_text(
+            "", "Санкт-Петербург. 5 мая. INTERFAX.RU – Северная столица.", source="interfax"
+        )
+        assert text == "Северная столица."
+
+    def test_interfax_dateline_after_toc(self):
+        """Дейтлайн появляется в середине после оглавления — должен убираться."""
+        _, text = clean_article_text(
+            "",
+            "Сводка событий\n\nМосква. 3 мая. INTERFAX.RU - Содержание.",
+            source="interfax",
+        )
+        assert "INTERFAX.RU" not in text
+        assert "Сводка событий" in text
+        assert "Содержание" in text
+
+    def test_no_source_skips_stripping(self):
+        """Без source — дейтлайн остаётся как есть."""
+        original = "МОСКВА, 3 мая. /ТАСС/. Текст."
+        _, text = clean_article_text("", original, source=None)
+        assert text == original
+
+    def test_other_source_skips_stripping(self):
+        """Для не-ТАСС/Интерфакса источника не трогаем."""
+        original = "МОСКВА, 3 мая. /ТАСС/. Текст."
+        _, text = clean_article_text("", original, source="lenta")
+        assert text == original
+
+    def test_display_name_works(self):
+        """Источник может быть в человекочитаемом виде (как в БД)."""
+        _, text = clean_article_text(
+            "", "МОСКВА, 3 мая. /ТАСС/. Текст.", source="ТАСС"
+        )
+        assert text == "Текст."
+
+    def test_title_not_affected(self):
+        """Заголовок не должен модифицироваться."""
+        title, _ = clean_article_text(
+            "Заголовок про МОСКВА /ТАСС/",
+            "МОСКВА, 3 мая. /ТАСС/. Текст.",
+            source="tass",
+        )
+        assert "МОСКВА" in title

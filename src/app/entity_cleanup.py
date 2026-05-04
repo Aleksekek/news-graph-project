@@ -2,15 +2,15 @@
 Модуль LLM-очистки сущностей.
 
 Используется планировщиком NER-сервиса (автоматический еженедельный запуск)
-и CLI-скриптом scripts/llm_entity_cleanup.py (ручной запуск с JSON-ревью).
+и CLI-скриптом scripts/legacy/llm_entity_cleanup.py (ручной запуск с JSON-ревью).
 """
 
 import asyncio
 import json
-import os
 
 from openai import AsyncOpenAI
 
+from src.config.settings import settings
 from src.database.pool import DatabasePoolManager
 from src.utils.logging import get_logger
 
@@ -334,7 +334,7 @@ async def call_llm(
 
 def _make_client() -> AsyncOpenAI:
     return AsyncOpenAI(
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        api_key=settings.DEEPSEEK_API_KEY,
         base_url="https://api.deepseek.com",
     )
 
@@ -354,7 +354,7 @@ async def run_full_cleanup(
     Полный цикл LLM-очистки: fetch → LLM-батчинг → apply → merge.
 
     Используется планировщиком NER-сервиса. Для ручного запуска с JSON-ревью
-    используйте scripts/llm_entity_cleanup.py.
+    используйте scripts/legacy/llm_entity_cleanup.py.
 
     Возвращает словарь статистики.
     """

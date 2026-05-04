@@ -39,7 +39,7 @@ class TestNERProcessorBatch:
         p.processed_repo = AsyncMock()
         p.entity_repo = AsyncMock()
         p.article_entity_repo = AsyncMock()
-        p.natasha = MagicMock()
+        p.ner = MagicMock()
         return p
 
     @pytest.mark.asyncio
@@ -51,7 +51,7 @@ class TestNERProcessorBatch:
         assert stats.total_articles == 0
         assert stats.processed == 0
         assert stats.failed == 0
-        processor.natasha.extract.assert_not_called()
+        processor.ner.extract.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_successful_processing_increments_stats(self, processor):
@@ -59,7 +59,7 @@ class TestNERProcessorBatch:
         processor.processed_repo.create.return_value = 10
         processor.entity_repo.upsert.return_value = (42, True)
         processor.article_entity_repo.save_batch.return_value = 1
-        processor.natasha.extract.return_value = [_make_entity("Путин"), _make_entity("Сбербанк")]
+        processor.ner.extract.return_value = [_make_entity("Путин"), _make_entity("Сбербанк")]
 
         stats = await processor.process_batch()
 
@@ -76,7 +76,7 @@ class TestNERProcessorBatch:
         # Первая сущность новая, вторая уже существует
         processor.entity_repo.upsert.side_effect = [(1, True), (2, False)]
         processor.article_entity_repo.save_batch.return_value = 2
-        processor.natasha.extract.return_value = [
+        processor.ner.extract.return_value = [
             _make_entity("Путин"),
             _make_entity("Сбербанк"),
         ]
@@ -104,7 +104,7 @@ class TestNERProcessorBatch:
         processor.processed_repo.create.side_effect = [Exception("DB error"), 10, 11]
         processor.entity_repo.upsert.return_value = (1, True)
         processor.article_entity_repo.save_batch.return_value = 1
-        processor.natasha.extract.return_value = [_make_entity()]
+        processor.ner.extract.return_value = [_make_entity()]
 
         stats = await processor.process_batch()
 
@@ -118,7 +118,7 @@ class TestNERProcessorBatch:
         processor.processed_repo.create.return_value = 1
         processor.entity_repo.upsert.return_value = (1, False)
         processor.article_entity_repo.save_batch.return_value = 1
-        processor.natasha.extract.return_value = [_make_entity()]
+        processor.ner.extract.return_value = [_make_entity()]
 
         await processor.process_batch()
 
@@ -130,7 +130,7 @@ class TestNERProcessorBatch:
         processor.processed_repo.create.return_value = 55
         processor.entity_repo.upsert.return_value = (1, True)
         processor.article_entity_repo.save_batch.return_value = 1
-        processor.natasha.extract.return_value = [_make_entity()]
+        processor.ner.extract.return_value = [_make_entity()]
 
         await processor.process_batch()
 
@@ -140,8 +140,8 @@ class TestNERProcessorBatch:
         assert call_args[0][1].get("ner") is True     # ner флаг выставлен
 
     @pytest.mark.asyncio
-    async def test_natasha_called_with_cleaned_text(self, processor):
-        """NatashaClient получает очищенный текст, а не сырой HTML."""
+    async def test_ner_called_with_cleaned_text(self, processor):
+        """NER-клиент получает очищенный текст, а не сырой HTML."""
         article = {
             "id": 1,
             "raw_title": "<b>Заголовок</b>",
@@ -152,11 +152,11 @@ class TestNERProcessorBatch:
         processor.processed_repo.create.return_value = 1
         processor.entity_repo.upsert.return_value = (1, True)
         processor.article_entity_repo.save_batch.return_value = 0
-        processor.natasha.extract.return_value = []
+        processor.ner.extract.return_value = []
 
         await processor.process_batch()
 
-        title_arg, text_arg = processor.natasha.extract.call_args[0]
+        title_arg, text_arg = processor.ner.extract.call_args[0]
         assert "<b>" not in title_arg
         assert "<p>" not in text_arg
         assert "Заголовок" in title_arg

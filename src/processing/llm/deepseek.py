@@ -4,13 +4,12 @@
 
 import json
 import logging
-import os
 from datetime import datetime
 
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
+from src.config.settings import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +18,7 @@ class DeepSeekAnalyzer:
 
     def __init__(self):
         self.client = OpenAI(
-            api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com"
+            api_key=settings.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com"
         )
         self.model = "deepseek-v4-flash"
 

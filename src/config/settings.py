@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     # LLM
     DEEPSEEK_API_KEY: str = Field(default="", alias="DEEPSEEK_API_KEY")
 
+    # NER engine — переключатель между Natasha (sync, локально) и LLM (DeepSeek API).
+    # Значения: "natasha" (default) | "llm". Меняется через .env, без редеплоя кода.
+    NER_ENGINE: str = Field(default="natasha", alias="NER_ENGINE")
+
+    # NER batch processing
+    NER_BATCH_SIZE: int = Field(default=100, alias="NER_BATCH_SIZE")
+    # Параллельность обработки внутри батча. Для Natasha sync — gather всё равно
+    # выполняется псевдо-последовательно (extract блокирует event loop), 5 безопасно.
+    # Для LLM — реальный параллелизм HTTP-вызовов к DeepSeek; 5 — баланс скорости и квот.
+    NER_BATCH_CONCURRENCY: int = Field(default=5, alias="NER_BATCH_CONCURRENCY")
+
     # Парсеры
     PARSER_REQUEST_DELAY: float = Field(default=2.0, alias="PARSER_REQUEST_DELAY")
     PARSER_MAX_RETRIES: int = Field(default=3, alias="PARSER_MAX_RETRIES")
@@ -28,6 +39,10 @@ class Settings(BaseSettings):
     # Логирование
     LOG_LEVEL: str = Field(default="INFO", alias="LOG_LEVEL")
     LOG_DIR: str = Field(default="logs", alias="LOG_DIR")
+    # Имя сервиса — определяет имя лог-файла (logs/<SERVICE_NAME>.log).
+    # Задаётся в docker-compose.yml для каждого контейнера: parser/summarizer/ner/bot.
+    # Дефолт "app" — для локального запуска и тестов.
+    SERVICE_NAME: str = Field(default="app", alias="SERVICE_NAME")
 
     # Telegram
     TELEGRAM_BOT_TOKEN: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")

@@ -69,8 +69,11 @@ def get_logger(name: str) -> logging.Logger:
     console_handler.setFormatter(ColoredFormatter(log_format, date_format))
     logger.addHandler(console_handler)
 
-    # Файловый handler
-    file_handler = logging.FileHandler(log_path / "app.log", encoding="utf-8")
+    # Файловый handler — per-service лог. Имя берётся из settings.SERVICE_NAME,
+    # это позволяет healthcheck'ам отличать жив-ли конкретный контейнер.
+    file_handler = logging.FileHandler(
+        log_path / f"{settings.SERVICE_NAME}.log", encoding="utf-8"
+    )
     file_handler.setFormatter(logging.Formatter(log_format, date_format))
     logger.addHandler(file_handler)
 
