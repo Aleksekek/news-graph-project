@@ -72,39 +72,51 @@
 | `watchlists` | **schema only** — пользовательские списки сущностей для мониторинга |
 | `risk_scores` | **schema only** — риск-оценки статей по сущностям |
 
-## Нормализация сущностей (entity_aliases)
+## NER engine (Natasha vs LLM)
+
+Поддерживается два движка через фабрику `src/processing/ner/factory.py`:
+
+| | `natasha` (default) | `llm` |
+|---|---|---|
+| Реализация | [NatashaClient](../src/processing/ner/natasha_client.py) | [LLMNERClient](../src/processing/ner/llm_client.py) (DeepSeek API) |
+| Async | sync | async |
+| Канонизация | через `entity_aliases` (post-extract) | at-extract-time |
+| Расход | бесплатно | ~$0.0001 / статья |
+| Типы | person/organization/location | + event |
+| Importance | по позиции в тексте (1.0/0.7/0.3) | LLM решает (subject/key/mention) |
+
+Переключение через `NER_ENGINE` в `.env`. Размер и параллелизм батча — `NER_BATCH_SIZE` и `NER_BATCH_CONCURRENCY`.
+
+## Нормализация сущностей (legacy: entity_aliases)
+
+Используется только в режиме `NER_ENGINE=natasha`. После миграции на LLM становится не нужна.
 
 Таблица `entity_aliases` хранит маппинг `(alias_name, alias_type) → (canonical_name, canonical_type)`.
+`EntityRepository.upsert()` ищет алиас и подставляет каноническое имя/тип; `canonical_type='discard'`
+полностью отбрасывает сущность.
 
-**Как работает:**
-1. При сохранении сущности `EntityRepository.upsert()` делает SELECT в `entity_aliases`
-2. Если найдено совпадение — подставляет каноническое имя/тип
-3. Если `canonical_type = 'discard'` — сущность пропускается полностью
-4. Type-specific алиасы имеют приоритет над type-agnostic (NULL)
-
-**Управление алиасами:**
+CLI-инструменты алиасной workflow вынесены в [`scripts/legacy/`](../scripts/legacy/):
 
 ```
-scripts/entity_aliases_data.py      # seed-данные (редактировать здесь)
-scripts/migrate_entity_aliases.py   # CREATE TABLE + upsert seed-данных
-scripts/merge_entity_aliases.py     # разовое слияние дублей в entities
-scripts/llm_entity_cleanup.py       # LLM-обнаружение новых алиасов (ручной)
-src/app/entity_cleanup.py           # модуль очистки (используется планировщиком)
+scripts/legacy/
+├── entity_aliases_data.py      # seed-данные алиасов
+├── migrate_entity_aliases.py   # создание/наполнение entity_aliases
+├── merge_entity_aliases.py     # слияние дублей в entities
+├── llm_entity_cleanup.py       # ручной LLM-cleanup с JSON-ревью
+└── ner_diagnostic.py           # диагностика бакетов ошибок Natasha
 ```
 
-**Автоматический цикл (еженедельно, вс 03:00 МСК):**
-```
-fetch entities → LLM-батчинг (8 параллельных) → apply_aliases_to_db → merge_entity_aliases
-```
+Автоматический weekly cleanup ([src/app/entity_cleanup.py](../src/app/entity_cleanup.py))
+крутится в NER-сервисе по воскресеньям 03:00 МСК (Natasha-режим).
 
 ## Потоки данных
 
 1. **Парсинг** → `ParsedItem` → конвертер → `raw_articles`
-2. **NER** → `raw_articles` → Natasha → `processed_articles` + `entities` + `article_entities`
-   - При записи entity: alias lookup → resolved_name/type → INSERT
+2. **NER** (Natasha): `raw_articles` → Natasha → `processed_articles` + `entities` + `article_entities`,
+   с alias-lookup на upsert.
+   **NER** (LLM): то же, но без alias-lookup — DeepSeek канонизирует сразу.
 3. **Суммаризация** → `raw_articles` → DeepSeek → `summarizations`
 4. **Бот** → запросы к репозиториям → ответ пользователю
-5. **LLM-очистка** → `entities` → DeepSeek-батчи → `entity_aliases` → merge
 
 ## Расширение
 
@@ -118,9 +130,9 @@ fetch entities → LLM-батчинг (8 параллельных) → apply_ali
 
 Подробнее: [adding_new_source.md](adding_new_source.md)
 
-### Добавление алиасов сущностей
+### Добавление алиасов сущностей (legacy / Natasha-режим)
 
-Отредактировать `scripts/entity_aliases_data.py`, затем:
+Отредактировать `scripts/legacy/entity_aliases_data.py`, затем:
 ```bash
-python scripts/migrate_entity_aliases.py --seed-only
+python scripts/legacy/migrate_entity_aliases.py --seed-only
 ```
