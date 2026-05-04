@@ -18,6 +18,7 @@ print('Natasha models ready')"
 COPY src /app/src
 COPY services/ner/app.py .
 COPY services/healthcheck.py /app/healthcheck.py
+COPY scripts /app/scripts
 
 RUN mkdir -p /app/logs
 
