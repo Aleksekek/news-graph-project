@@ -10,8 +10,8 @@
 Безопасно перезапускать: идемпотентен (уже слитые записи пропускаются).
 
 Запуск (из корня проекта):
-    python scripts/merge_entity_aliases.py
-    python scripts/merge_entity_aliases.py --dry-run    # показать что будет слито
+    python scripts/legacy/merge_entity_aliases.py
+    python scripts/legacy/merge_entity_aliases.py --dry-run    # показать что будет слито
 """
 
 import argparse

@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
 import re
 import sys
 import time
@@ -25,15 +24,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from src.config.settings import settings
 from src.database.pool import DatabasePoolManager
 from src.processing.ner.natasha_client import NatashaClient
 from src.processing.ner.text_cleaner import clean_article_text
 from src.utils.logging import get_logger
 
-load_dotenv()
 logger = get_logger("ner_benchmark")
 
 DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -409,8 +407,8 @@ async def main() -> None:
     parser.add_argument("--json", type=str, default=None)
     args = parser.parse_args()
 
-    if not os.getenv("DEEPSEEK_API_KEY"):
-        print("ERROR: DEEPSEEK_API_KEY not set in environment / .env")
+    if not settings.DEEPSEEK_API_KEY:
+        print("ERROR: DEEPSEEK_API_KEY not set in settings / .env")
         return
 
     print("Initializing Natasha (~250MB embeddings)...")
@@ -442,7 +440,7 @@ async def main() -> None:
     # DeepSeek (async, parallel)
     print("Running DeepSeek...")
     deepseek_client = AsyncOpenAI(
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        api_key=settings.DEEPSEEK_API_KEY,
         base_url="https://api.deepseek.com",
     )
     sem = asyncio.Semaphore(DEEPSEEK_CONCURRENCY)

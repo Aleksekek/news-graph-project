@@ -5,9 +5,9 @@
 поэтому смена canonical_name (например, Банк России → ЦБ РФ) применяется.
 
 Запуск (из корня проекта):
-    python scripts/migrate_entity_aliases.py
-    python scripts/migrate_entity_aliases.py --seed-only   # только сидинг (таблица уже есть)
-    python scripts/migrate_entity_aliases.py --dry-run     # показать что будет применено
+    python scripts/legacy/migrate_entity_aliases.py
+    python scripts/legacy/migrate_entity_aliases.py --seed-only   # только сидинг (таблица уже есть)
+    python scripts/legacy/migrate_entity_aliases.py --dry-run     # показать что будет применено
 """
 
 import argparse

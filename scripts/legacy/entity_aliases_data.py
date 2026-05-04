@@ -4,7 +4,7 @@
 alias_type=None => применяется к любому типу сущности с таким именем.
 
 Редактировать здесь, затем применить:
-    python scripts/migrate_entity_aliases.py --seed-only
+    python scripts/legacy/migrate_entity_aliases.py --seed-only
 """
 
 SEED_ALIASES: list[tuple[str, str | None, str, str]] = [

@@ -3,16 +3,19 @@
 Запускает парсер, выводит статьи в читаемом виде — можно сверить с сайтом.
 
 Запуск:
-    python scripts/demo_parsers.py                        # все три парсера по 5 статей
+    python scripts/demo_parsers.py                        # все четыре парсера по 5 статей
     python scripts/demo_parsers.py --source interfax      # только Интерфакс
     python scripts/demo_parsers.py --source tass --limit 10
     python scripts/demo_parsers.py --source rbc --full    # показать полный текст
-    python scripts/demo_parsers.py --source rbc --archive # архивный парсинг (1 января 2026)
+    python scripts/demo_parsers.py --source lenta --archive # архивный парсинг (1 января 2026)
 
 Примеры:
     python scripts/demo_parsers.py --source interfax --limit 3 --full
     python scripts/demo_parsers.py --source tass --limit 5
+    python scripts/demo_parsers.py --source lenta --limit 5
     python scripts/demo_parsers.py --source rbc --archive --limit 5
+
+TInvest здесь не поддерживается — у него специфичный API (тикеры обязательны).
 """
 
 import argparse
@@ -37,7 +40,7 @@ logging.disable(logging.DEBUG)  # скрываем дебаг-шум, остав
 
 from src.parsers.factory import ParserFactory
 
-SOURCES = ["interfax", "tass", "rbc"]
+SOURCES = ["lenta", "interfax", "tass", "rbc"]
 PREVIEW_CHARS = 400  # символов текста в превью
 
 

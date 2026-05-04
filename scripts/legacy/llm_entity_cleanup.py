@@ -8,10 +8,10 @@ LLM-очистка сущностей: находит алиасы и испра
 
 Рабочий процесс:
   1. Запустить (вызывает LLM, сохраняет результат в JSON):
-       python scripts/llm_entity_cleanup.py
+       python scripts/legacy/llm_entity_cleanup.py
   2. Проверить результат в файле llm_cleanup_YYYYMMDD_HHMMSS.json
   3. Применить к БД:
-       python scripts/llm_entity_cleanup.py --apply llm_cleanup_*.json
+       python scripts/legacy/llm_entity_cleanup.py --apply llm_cleanup_*.json
 
 Опции:
   --dry-run              Показать состав батчей без вызова LLM
@@ -70,7 +70,7 @@ async def apply_results(result_file: Path) -> None:
     applied = await apply_aliases_to_db(raw_aliases, type_fixes)
     logger.info(f"Применено: {applied} записей в entity_aliases")
     logger.info(
-        "Следующий шаг: python scripts/merge_entity_aliases.py "
+        "Следующий шаг: python scripts/legacy/merge_entity_aliases.py "
         "(или --dry-run для предварительного просмотра)"
     )
     if discards:
@@ -260,7 +260,7 @@ async def run_generate(
         f"ошибок={errors}"
     )
     logger.info(f"Результат: {out_path}")
-    logger.info(f"Применить: python scripts/llm_entity_cleanup.py --apply {out_path.name}")
+    logger.info(f"Применить: python scripts/legacy/llm_entity_cleanup.py --apply {out_path.name}")
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
