@@ -22,46 +22,27 @@ updates:
           - "minor"
           - "patch"
 
-  # Python deps в services/*/requirements.txt
+  # Python deps в services/*/requirements.txt — ОДИН entry на 4 директории
+  # с группировкой → общие зависимости (openai и т.п.) будут в одном PR.
   - package-ecosystem: "pip"
-    directory: "/services/parser"
+    directories:
+      - "/services/parser"
+      - "/services/ner"
+      - "/services/summarizer"
+      - "/services/bot"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
-      - "service:parser"
-
-  - package-ecosystem: "pip"
-    directory: "/services/ner"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "service:ner"
-
-  - package-ecosystem: "pip"
-    directory: "/services/summarizer"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "service:summarizer"
-
-  - package-ecosystem: "pip"
-    directory: "/services/bot"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "dependencies"
-      - "service:bot"
+      - "python"
+      - "services"
+    groups:
+      services-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions — реже, monthly
   - package-ecosystem: "github-actions"
@@ -73,35 +54,23 @@ updates:
       - "dependencies"
       - "github-actions"
 
-  # Docker base images — monthly
+  # Docker base images — monthly, ОДИН PR на все 4 сервиса (через `directories`).
+  # Игнорируем major-bump'ы Python: 3.11→3.14 ломает совместимость с
+  # натишей/asyncpg/wheels — апгрейды major'а делаем вручную.
   - package-ecosystem: "docker"
-    directory: "/services/parser"
+    directories:
+      - "/services/parser"
+      - "/services/ner"
+      - "/services/summarizer"
+      - "/services/bot"
     schedule:
       interval: "monthly"
     labels:
       - "dependencies"
       - "docker"
-
-  - package-ecosystem: "docker"
-    directory: "/services/ner"
-    schedule:
-      interval: "monthly"
-    labels:
-      - "dependencies"
-      - "docker"
-
-  - package-ecosystem: "docker"
-    directory: "/services/summarizer"
-    schedule:
-      interval: "monthly"
-    labels:
-      - "dependencies"
-      - "docker"
-
-  - package-ecosystem: "docker"
-    directory: "/services/bot"
-    schedule:
-      interval: "monthly"
-    labels:
-      - "dependencies"
-      - "docker"
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-base:
+        patterns: ["*"]
