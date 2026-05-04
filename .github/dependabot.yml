@@ -55,8 +55,9 @@ updates:
       - "github-actions"
 
   # Docker base images — monthly, ОДИН PR на все 4 сервиса (через `directories`).
-  # Игнорируем major-bump'ы Python: 3.11→3.14 ломает совместимость с
-  # натишей/asyncpg/wheels — апгрейды major'а делаем вручную.
+  # Игнорируем ВСЕ bump'ы Python: 3.11→3.14 для dependabot это semver-minor
+  # (major=3 не меняется), но для Python это огромный скачок ломающий wheels
+  # и совместимость библиотек. Апгрейды Python делаем вручную и осознанно.
   - package-ecosystem: "docker"
     directories:
       - "/services/parser"
@@ -70,7 +71,6 @@ updates:
       - "docker"
     ignore:
       - dependency-name: "python"
-        update-types: ["version-update:semver-major"]
     groups:
       docker-base:
         patterns: ["*"]
