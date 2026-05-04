@@ -1,0 +1,107 @@
+# Dependabot — раз в неделю проверяет новые версии зависимостей и открывает PR'ы.
+# Особенно важно для security-фиксов в transitive deps.
+#
+# Документация: https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # Python deps в корневом requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    # Группируем minor/patch апдейты в один PR — меньше шума
+    groups:
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Python deps в services/*/requirements.txt
+  - package-ecosystem: "pip"
+    directory: "/services/parser"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "service:parser"
+
+  - package-ecosystem: "pip"
+    directory: "/services/ner"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "service:ner"
+
+  - package-ecosystem: "pip"
+    directory: "/services/summarizer"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "service:summarizer"
+
+  - package-ecosystem: "pip"
+    directory: "/services/bot"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "service:bot"
+
+  # GitHub Actions — реже, monthly
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Docker base images — monthly
+  - package-ecosystem: "docker"
+    directory: "/services/parser"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/services/ner"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/services/summarizer"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  - package-ecosystem: "docker"
+    directory: "/services/bot"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "docker"

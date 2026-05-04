@@ -118,6 +118,11 @@ jobs:
           # LLM
           DEEPSEEK_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
 
+          # NER engine: natasha | llm
+          NER_ENGINE=${{ vars.NER_ENGINE }}
+          NER_BATCH_SIZE=${{ vars.NER_BATCH_SIZE }}
+          NER_BATCH_CONCURRENCY=${{ vars.NER_BATCH_CONCURRENCY }}
+
           # Парсеры
           PARSER_REQUEST_DELAY=${{ vars.PARSER_REQUEST_DELAY }}
           PARSER_MAX_RETRIES=${{ vars.PARSER_MAX_RETRIES }}
