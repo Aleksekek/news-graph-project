@@ -14,10 +14,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем общий код
 COPY src /app/src
 
-# Копируем точку входа
+# Копируем точку входа и healthcheck
 COPY services/parser/app.py .
+COPY services/healthcheck.py /app/healthcheck.py
 
 # Создаём директории для логов
 RUN mkdir -p /app/logs
+
+# Healthcheck: проверяет что в /app/logs/$SERVICE_NAME.log была запись
+# не старше HEALTHCHECK_MAX_AGE сек. Override threshold в docker-compose.yml.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD python /app/healthcheck.py || exit 1
 
 CMD ["python", "app.py"]

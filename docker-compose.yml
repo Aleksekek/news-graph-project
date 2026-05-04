@@ -1,5 +1,17 @@
 version: '3.8'
 
+# Healthcheck в каждом сервисе ловит "процесс жив, но ничего не делает"
+# (deadlock в asyncpg, зависший event loop, бесконечный retry в LLM).
+# Логика проверки: log-файл сервиса (logs/<SERVICE_NAME>.log) был обновлён
+# не старше HEALTHCHECK_MAX_AGE секунд. Скрипт в services/healthcheck.py.
+#
+# Per-service пороги:
+#   parser     — 30-мин cron, max_age=3600 (час запас на длинный батч)
+#   ner        — 30-мин cron, max_age=3600
+#   summarizer — hourly + daily, max_age=5400 (1.5 часа)
+#   bot        — event-driven, может молчать долго; HEALTHCHECK не задаём,
+#                полагаемся на restart-policy для крэшей
+
 services:
   parser:
     build:
@@ -11,6 +23,9 @@ services:
       - ./config/schedule_config.yaml:/app/config/schedule_config.yaml
     env_file:
       - .env
+    environment:
+      - SERVICE_NAME=parser
+      - HEALTHCHECK_MAX_AGE=3600
     restart: unless-stopped
     networks:
       - news_network
@@ -22,6 +37,9 @@ services:
     container_name: news_graph_summarizer
     env_file:
       - .env
+    environment:
+      - SERVICE_NAME=summarizer
+      - HEALTHCHECK_MAX_AGE=5400
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
@@ -37,6 +55,9 @@ services:
       - ./logs:/app/logs
     env_file:
       - .env
+    environment:
+      - SERVICE_NAME=ner
+      - HEALTHCHECK_MAX_AGE=3600
     restart: unless-stopped
     networks:
       - news_network
@@ -50,6 +71,8 @@ services:
       - ./logs:/app/logs
     env_file:
       - .env
+    environment:
+      - SERVICE_NAME=bot
     restart: unless-stopped
     networks:
       - news_network

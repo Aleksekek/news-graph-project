@@ -17,7 +17,11 @@ print('Natasha models ready')"
 
 COPY src /app/src
 COPY services/ner/app.py .
+COPY services/healthcheck.py /app/healthcheck.py
 
 RUN mkdir -p /app/logs
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
+    CMD python /app/healthcheck.py || exit 1
 
 CMD ["python", "app.py"]
