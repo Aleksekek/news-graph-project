@@ -16,7 +16,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
       
       - name: Set up Python
         uses: actions/setup-python@v5.6.0
@@ -65,7 +65,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
       
       - name: Set up Python
         uses: actions/setup-python@v5.6.0
@@ -94,7 +94,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
 
       - name: Sync code to project directory
         run: |         
