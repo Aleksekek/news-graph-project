@@ -8,6 +8,7 @@ from typing import Any
 import asyncpg
 
 from src.database.pool import DatabasePoolManager
+from src.utils.datetime_utils import msk_naive_to_aware
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -44,7 +45,9 @@ class ProcessedArticleRepository:
                 raw_article_id,
                 title[:10000],
                 text[:100000],
-                published_at,
+                # naive MSK → aware MSK: сериализация перестаёт зависеть от
+                # локальной TZ процесса (см. article_repository.save_batch)
+                msk_naive_to_aware(published_at),
             )
             return row["id"]
 

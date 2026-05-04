@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 
 from src.database.pool import DatabasePoolManager
+from src.utils.datetime_utils import msk_naive_to_aware
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,10 @@ class SummaryRepository:
                         cost_usd = EXCLUDED.cost_usd
                     RETURNING id
                     """,
-                    period_start,
-                    period_end,
+                    # naive MSK → aware MSK: сериализация перестаёт зависеть
+                    # от локальной TZ процесса (см. article_repository.save_batch)
+                    msk_naive_to_aware(period_start),
+                    msk_naive_to_aware(period_end),
                     period_type,
                     json.dumps(content),
                     model_used,

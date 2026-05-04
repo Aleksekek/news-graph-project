@@ -5,7 +5,7 @@
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -14,6 +14,7 @@ from apscheduler.triggers.cron import CronTrigger
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.processing.summarization.service import SummarizationService
+from src.utils.datetime_utils import now_msk
 from src.utils.logging import setup_logging
 
 logger = setup_logging()
@@ -23,10 +24,9 @@ async def run_hourly_summarization():
     """Запуск суммаризации за прошедший час."""
     service = SummarizationService()
 
-    # Суммаризируем предыдущий час
-    last_hour = datetime.now().replace(minute=0, second=0, microsecond=0) - timedelta(
-        hours=1
-    )
+    # Суммаризируем предыдущий час (в MSK; datetime.now() без TZ = local TZ,
+    # которая в Docker = UTC и сбивает временные границы)
+    last_hour = now_msk().replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
 
     logger.info(f"🕐 Запуск часовой суммаризации для {last_hour}")
 
@@ -45,9 +45,7 @@ async def run_daily_summary():
     """Утренняя сводка за вчерашний день."""
     service = SummarizationService()
 
-    yesterday = datetime.now().replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ) - timedelta(days=1)
+    yesterday = now_msk().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
 
     logger.info(f"📅 Запуск дневной суммаризации для {yesterday.date()}")
 

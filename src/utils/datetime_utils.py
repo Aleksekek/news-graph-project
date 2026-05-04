@@ -196,22 +196,6 @@ def naive_msk_dt(dt: datetime) -> datetime:
     return dt
 
 
-def format_for_db(msk_naive: datetime) -> datetime:
-    """
-    Конвертирует MSK naive datetime в UTC naive для БД.
-    Это правильный подход — БД должна хранить UTC.
-    """
-    if msk_naive is None:
-        return None
-    if msk_naive.tzinfo is not None:
-        msk_naive = msk_naive.replace(tzinfo=None)
-
-    # Помечаем как MSK и конвертируем в UTC
-    msk_aware = msk_naive.replace(tzinfo=MSK_TZ)
-    utc_naive = msk_aware.astimezone(timezone.utc).replace(tzinfo=None)
-    return utc_naive
-
-
 def format_for_display(dt: datetime, include_time: bool = True) -> str:
     """
     Форматирует datetime для отображения пользователю.

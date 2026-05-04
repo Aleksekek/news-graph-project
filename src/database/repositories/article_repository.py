@@ -10,7 +10,7 @@ import asyncpg
 
 from src.core.models import ArticleForDB, ProcessingStats
 from src.database.pool import DatabasePoolManager
-from src.utils.datetime_utils import format_for_db, now_msk, now_msk_aware
+from src.utils.datetime_utils import msk_naive_to_aware, now_msk, now_msk_aware
 from src.utils.logging import get_logger
 from src.utils.retry import async_retry
 
@@ -68,9 +68,9 @@ class ArticleRepository:
             # Подготавливаем данные для batch insert
             batch_data = []
             for article in new_articles:
-                # Приводим дату к MSK naive
-                published_at = format_for_db(article.published_at) if article.published_at else None
-
+                # Конвертеры отдают naive MSK; делаем aware MSK перед INSERT,
+                # чтобы asyncpg сериализовал детерминированно — независимо от
+                # локальной TZ процесса (Windows=MSK, Docker=UTC дают разный physical).
                 batch_data.append(
                     (
                         article.source_id,
@@ -80,7 +80,7 @@ class ArticleRepository:
                         (article.raw_text or "")[:10000],
                         (article.raw_html or "")[:50000] if article.raw_html else None,
                         self._prepare_json(article.media_content),
-                        published_at,
+                        msk_naive_to_aware(article.published_at),
                         (article.author or "")[:255] if article.author else None,
                         article.language or "ru",
                         self._prepare_json(article.headers),
