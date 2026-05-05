@@ -20,7 +20,7 @@ CREATE TABLE sources (
 CREATE TABLE entities (
     id BIGSERIAL PRIMARY KEY,
     normalized_name VARCHAR(500) NOT NULL, -- Нормализованное имя (например, "Сбербанк")
-    type VARCHAR(50) NOT NULL,             -- 'person', 'organization', 'location', 'product'
+    type VARCHAR(50) NOT NULL,             -- 'person' | 'organization' | 'location' | 'event' | 'concept'
     original_name VARCHAR(500),            -- Имя как оно встретилось в тексте впервые ("Сбер")
     wiki_link TEXT,                        -- Ссылка на Википедию или другой источник истины
     external_ids JSONB,                    -- Внешние ID: {'inn': '7707083893', 'wikidata': 'Q205012'}

@@ -77,7 +77,7 @@ class ExtractedEntity(BaseModel):
 
     original_name: str
     normalized_name: str
-    entity_type: str  # 'person' | 'organization' | 'location' | 'event' (event только из LLM-NER)
+    entity_type: str  # 'person' | 'organization' | 'location' | 'event' | 'concept' (event/concept только из LLM-NER)
     count: int = 1
     importance_score: float = 0.3
     context_snippet: str | None = None

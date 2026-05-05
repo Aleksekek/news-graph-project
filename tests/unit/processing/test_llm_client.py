@@ -121,6 +121,12 @@ class TestParseResponse:
         assert len(entities) == 1
         assert entities[0].entity_type == "event"
 
+    def test_concept_type_supported(self, llm_client):
+        content = '[{"mention": "НДС", "canonical": "НДС", "type": "concept", "importance": "key"}]'
+        entities = llm_client._parse_response(content, "Ставка НДС изменится...")
+        assert len(entities) == 1
+        assert entities[0].entity_type == "concept"
+
 
 class TestExtract:
     """End-to-end вызов extract() с моком HTTP."""
@@ -161,11 +167,14 @@ class TestExtract:
 
         await llm_client.extract("", very_long)
 
-        sent_prompt = llm_client.client.chat.completions.create.call_args.kwargs["messages"][0][
-            "content"
-        ]
-        # Промпт включает шаблон + текст; проверяем, что не превысил max+промпт-overhead
-        assert len(sent_prompt) <= _MAX_TEXT_CHARS + 5000
+        # messages[0] = system (стабильный промт), messages[1] = user (текст статьи).
+        # Проверяем, что текст порезан, а не отправлен целиком.
+        messages = llm_client.client.chat.completions.create.call_args.kwargs["messages"]
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        user_content = messages[1]["content"]
+        # user-сообщение = "ТЕКСТ:\n" + усечённый текст; overhead 10 символов хватит
+        assert len(user_content) <= _MAX_TEXT_CHARS + 50
 
 
 class TestFactory:
