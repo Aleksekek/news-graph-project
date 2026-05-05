@@ -12,6 +12,24 @@ from src.utils.retry import async_retry
 logger = get_logger("database.entity_repository")
 
 
+def _normalize_canonical_name(name: str) -> str:
+    """
+    Нормализация canonical перед записью в БД:
+      - "ё/Ё" → "е/Е" (LLM на одной статье даёт "Артём", на другой "Артем" — сводим)
+      - первая буква в верхнем регистре, если строчная
+        ("налог на доходы..." → "Налог на доходы...";
+         аббревиатуры "ВТБ", "КПРФ", "НДС" остаются как есть)
+    Существующий UNIQUE(normalized_name, type) после этой нормализации
+    сам сводит дубли через ON CONFLICT — без изменения схемы.
+    """
+    if not name:
+        return name
+    name = name.replace("ё", "е").replace("Ё", "Е")
+    if name[0].islower():
+        name = name[0].upper() + name[1:]
+    return name
+
+
 class EntityRepository:
     """CRUD для entities."""
 
@@ -40,6 +58,11 @@ class EntityRepository:
 
             resolved_name = alias["canonical_name"] if alias else entity.normalized_name[:500]
             resolved_type = alias["canonical_type"] if alias else entity.entity_type
+
+            # Нормализация canonical: ё→е и заглавная первая буква. Это одна точка,
+            # после которой ON CONFLICT (normalized_name, type) сворачивает дубли
+            # "Артем"/"Артём", "налог"/"Налог", "цифровой рубль"/"Цифровой рубль".
+            resolved_name = _normalize_canonical_name(resolved_name)
 
             if resolved_type == "discard":
                 return None, False

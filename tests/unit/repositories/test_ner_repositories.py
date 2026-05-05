@@ -172,6 +172,66 @@ class TestEntityRepository:
         assert "Сбер" in args[1]           # canonical_name подставлено
         assert "organization" in args[2]
 
+    @pytest.mark.asyncio
+    async def test_upsert_replaces_yo_with_e(self, repo, mock_conn):
+        ent = ExtractedEntity(
+            original_name="Артёма",
+            normalized_name="Артём",
+            entity_type="person",
+            count=1,
+            importance_score=0.7,
+        )
+        mock_conn.fetchrow.side_effect = [None, {"id": 1, "is_new": True}]
+        with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
+            mock_pool.connection.return_value.__aenter__.return_value = mock_conn
+            await repo.upsert(ent)
+
+        args = mock_conn.fetchrow.call_args_list[1][0]
+        assert args[1] == "Артем"  # ё заменено на е
+
+    @pytest.mark.asyncio
+    async def test_upsert_capitalizes_first_letter(self, repo, mock_conn):
+        ent = ExtractedEntity(
+            original_name="налога на доходы",
+            normalized_name="налог на доходы физических лиц",
+            entity_type="concept",
+            count=1,
+            importance_score=0.3,
+        )
+        mock_conn.fetchrow.side_effect = [None, {"id": 1, "is_new": True}]
+        with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
+            mock_pool.connection.return_value.__aenter__.return_value = mock_conn
+            await repo.upsert(ent)
+
+        args = mock_conn.fetchrow.call_args_list[1][0]
+        assert args[1] == "Налог на доходы физических лиц"
+
+    @pytest.mark.asyncio
+    async def test_upsert_preserves_uppercase_acronyms(self, repo, mock_conn):
+        ent = ExtractedEntity(
+            original_name="ВТБ",
+            normalized_name="ВТБ",
+            entity_type="organization",
+            count=1,
+            importance_score=0.5,
+        )
+        mock_conn.fetchrow.side_effect = [None, {"id": 1, "is_new": True}]
+        with patch("src.database.repositories.entity_repository.DatabasePoolManager") as mock_pool:
+            mock_pool.connection.return_value.__aenter__.return_value = mock_conn
+            await repo.upsert(ent)
+
+        args = mock_conn.fetchrow.call_args_list[1][0]
+        assert args[1] == "ВТБ"  # аббревиатура не покалечена
+
+    def test_normalize_canonical_name_helpers(self):
+        from src.database.repositories.entity_repository import _normalize_canonical_name
+        assert _normalize_canonical_name("Артём") == "Артем"
+        assert _normalize_canonical_name("ёжик") == "Ежик"  # ё→е + capitalize
+        assert _normalize_canonical_name("налог") == "Налог"
+        assert _normalize_canonical_name("ВТБ") == "ВТБ"
+        assert _normalize_canonical_name("Москва") == "Москва"
+        assert _normalize_canonical_name("") == ""
+
 
 class TestArticleEntityRepository:
     @pytest.fixture
