@@ -62,4 +62,5 @@ env/
 # Claude
 CLAUDE.md
 .claudeignore
+.claude
 product-vision.md
