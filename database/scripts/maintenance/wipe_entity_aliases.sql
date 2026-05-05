@@ -9,6 +9,8 @@
 -- Запуск:
 --   docker-compose exec postgres psql -U news_user -d news_db -f /path/to/wipe_entity_aliases.sql
 
+SET lock_timeout = '10s';
+
 BEGIN;
 
 TRUNCATE entity_aliases RESTART IDENTITY;

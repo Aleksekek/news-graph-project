@@ -16,6 +16,8 @@
 -- Запуск:
 --   docker-compose exec postgres psql -U news_user -d news_db -f /path/to/wipe_ner_tables.sql
 
+SET lock_timeout = '10s';
+
 BEGIN;
 
 -- 1. Очистка NER-таблиц (id-счётчики уходят в 1)
