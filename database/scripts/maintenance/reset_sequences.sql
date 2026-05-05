@@ -64,33 +64,25 @@ SELECT setval(
     false
 );
 
--- Проверка: какие значения теперь будут у следующих nextval() для каждой таблицы
-SELECT
-    'sources'             AS table_name,
-    last_value            AS current_seq_value,
-    is_called             AS will_advance_on_next_use
-FROM   pg_sequences
-WHERE  sequencename = 'sources_id_seq'
+-- Проверка: какие значения теперь будут у следующих nextval() для каждой таблицы.
+-- is_called берём напрямую из sequence-relation — в системном view pg_sequences
+-- этой колонки нет, она только у самой последовательности.
+-- После setval(..., false) ожидаем: last_value=N, is_called=false → следующий
+-- nextval() вернёт ровно N (а не N+1).
+SELECT 'sources'              AS table_name, last_value, is_called FROM sources_id_seq
 UNION ALL
-SELECT 'raw_articles', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'raw_articles_id_seq'
+SELECT 'raw_articles',         last_value, is_called FROM raw_articles_id_seq
 UNION ALL
-SELECT 'processed_articles', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'processed_articles_id_seq'
+SELECT 'processed_articles',   last_value, is_called FROM processed_articles_id_seq
 UNION ALL
-SELECT 'entities', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'entities_id_seq'
+SELECT 'entities',             last_value, is_called FROM entities_id_seq
 UNION ALL
-SELECT 'article_entities', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'article_entities_id_seq'
+SELECT 'article_entities',     last_value, is_called FROM article_entities_id_seq
 UNION ALL
-SELECT 'entity_aliases', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'entity_aliases_id_seq'
+SELECT 'entity_aliases',       last_value, is_called FROM entity_aliases_id_seq
 UNION ALL
-SELECT 'summarizations', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'summarizations_id_seq'
+SELECT 'summarizations',       last_value, is_called FROM summarizations_id_seq
 UNION ALL
-SELECT 'telegram_subscribers', last_value, is_called
-FROM   pg_sequences WHERE sequencename = 'telegram_subscribers_id_seq';
+SELECT 'telegram_subscribers', last_value, is_called FROM telegram_subscribers_id_seq;
 
 COMMIT;
