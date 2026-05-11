@@ -1,7 +1,7 @@
 asyncpg==0.31.0
 dotenv==0.9.9
-openai==2.34.0
+openai==2.36.0
 python-telegram-bot==22.7
-pydantic==2.13.3
-pydantic-settings==2.14.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
 socksio==1.0.0

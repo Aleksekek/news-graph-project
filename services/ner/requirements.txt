@@ -2,7 +2,7 @@ asyncpg==0.31.0
 APScheduler==3.11.2
 beautifulsoup4==4.14.3
 dotenv==0.9.9
-openai==2.34.0
-pydantic==2.13.3
-pydantic-settings==2.14.0
+openai==2.36.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
 natasha==1.6.0
